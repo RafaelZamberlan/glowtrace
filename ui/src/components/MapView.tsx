@@ -29,7 +29,7 @@ const MapNode = memo(function MapNode({ data }: NodeProps) {
       </div>
       <div className="msub">
         {d.sub}
-        {!!d.branches && <span className="mb">{d.branches} desvios</span>}
+        {!!d.branches && <span className="mb">{d.branches} {d.branches === 1 ? 'decisão' : 'decisões'}</span>}
         {d.external?.slice(0, 3).map((l) => (
           <span key={l} className="lib">
             {l}

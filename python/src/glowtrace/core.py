@@ -73,6 +73,7 @@ class Glowtrace:
         limits: Optional[Limits] = None,
         max_body: int = 32_768,
         expose_header: bool = True,
+        replay: Optional[bool] = None,
         backend: Optional[str] = None,
         title: Optional[str] = None,
     ) -> None:
@@ -103,6 +104,11 @@ class Glowtrace:
         self.title = title or getattr(app, "title", None) or "API"
         self._lock = threading.Lock()
         self.observed_edges: dict[tuple[str, str], int] = {}
+        # Replay re-sends recorded requests into the app: OFF unless explicitly enabled
+        # (GLOWTRACE_REPLAY=1 or replay=True). Meant for development environments only.
+        rp = _env("GLOWTRACE_REPLAY")
+        self.replay_enabled = (rp in ("1", "true", "True", "yes")) if rp is not None else bool(replay)
+        self._pending_replays: dict[str, dict] = {}
         self.internal_errors = 0
 
         self.registry = Registry(self.roots, list(exclude) if exclude else None)
@@ -193,6 +199,25 @@ class Glowtrace:
                     key = (p["fn"], f["fn"])
                     self.observed_edges[key] = self.observed_edges.get(key, 0) + 1
         self.store.put(ex)
+
+    def register_replay(self, replay_of: Optional[str], edits: list[str]) -> str:
+        """Reserve an execution id for a replay started by our own server."""
+        import uuid
+
+        rid = uuid.uuid4().hex[:16]
+        with self._lock:
+            self._pending_replays[rid] = {"id": rid, "replay_of": replay_of, "edits": edits[:50]}
+        return rid
+
+    def claim_replay(self, scope: dict) -> Optional[dict]:
+        """The replay a request belongs to - only if our server registered it (headers alone are not trusted)."""
+        if not self._pending_replays:
+            return None
+        for k, v in scope.get("headers") or []:
+            if k == b"x-glowtrace-replay-id":
+                with self._lock:
+                    return self._pending_replays.pop(v.decode("latin-1"), None)
+        return None
 
     def log_internal_error(self) -> None:
         self.internal_errors += 1

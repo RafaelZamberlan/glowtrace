@@ -115,6 +115,8 @@ class Recorder:
         self.started_at = time.time()
         self.closed = False
         self.truncated = False
+        self.replay_of: Optional[str] = None  # id of the recorded execution this request replays
+        self.replay_edits: list[str] = []
 
     def _now(self) -> int:
         return (time.perf_counter_ns() - self.t0) // 1000

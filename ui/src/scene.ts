@@ -1,5 +1,6 @@
 import dagre from '@dagrejs/dagre'
 import type { Edge as RFEdge, Node as RFNode } from '@xyflow/react'
+import { branchName, fmtMs, fmtUs, frameDurUs, nodeStatus, staticSubtitle, type Status } from './insight'
 import type { Execution, FlowNode, FnFlow, Frame, FrameOverlay, MiddlewareInfo, RouteInfo } from './types'
 
 export const PIPE = '__pipeline__'
@@ -162,7 +163,7 @@ export function callTargets(n: FlowNode, observed: Frame[] = []): string[] {
 // layout
 
 export const NODE_W = 270
-const NODE_H = 46
+const NODE_H = 56
 const SMALL = new Set(['break', 'continue', 'end', 'finally'])
 const HEADER = 50
 const PAD = 22
@@ -185,7 +186,7 @@ const layoutCache = new Map<string, FlowLayout>()
 
 export function nodeSize(n: FlowNode): { w: number; h: number } {
   if (SMALL.has(n.kind)) return { w: 150, h: 34 }
-  if (n.kind === 'start' || n.kind === 'trigger') return { w: NODE_W, h: 54 }
+  if (n.kind === 'start' || n.kind === 'trigger') return { w: NODE_W, h: 62 }
   return { w: NODE_W, h: NODE_H }
 }
 
@@ -258,7 +259,8 @@ export function place(insts: Inst[], flows: Map<string, FnFlow>): Placed[] {
 // ---------------------------------------------------------------------------
 // React Flow elements
 
-export type NodeState = 'normal' | 'visited' | 'dim' | 'error' | 'static'
+// Precedence (highest first): error > stale (code changed since recording) > visited > dim > static
+export type NodeState = 'normal' | 'visited' | 'stale' | 'dim' | 'error' | 'static'
 
 export interface FlowNodeData extends Record<string, unknown> {
   instKey: string
@@ -270,6 +272,8 @@ export interface FlowNodeData extends Record<string, unknown> {
   isRoot: boolean
   libs: string[]
   raised: boolean
+  status: Status | null
+  subtitle: string | null
 }
 
 export interface GroupData extends Record<string, unknown> {
@@ -301,6 +305,20 @@ export function pipelineOverlay(flow: FnFlow, exec: Execution): FrameOverlay {
     if (visits[String(e.source)] && visits[String(e.target)]) edges[String(i)] = 1
   })
   return { id: -1, visits, edges, error_node: errorNode }
+}
+
+/** Status lines for the request pipeline nodes. */
+function pipeStatus(n: FlowNode, exec: Execution | null): Status | null {
+  if (!exec) return null
+  if (n.kind === 'trigger') return { text: `${exec.status ?? '—'} · ${fmtMs(exec.duration_ms)}`, tone: (exec.status ?? 500) >= 500 ? 'err' : (exec.status ?? 0) >= 400 ? 'warn' : 'ok' }
+  if (n.kind === 'response') return { text: `HTTP ${exec.status ?? '—'}`, tone: (exec.status ?? 500) >= 500 ? 'err' : (exec.status ?? 0) >= 400 ? 'warn' : 'ok' }
+  const t = n.calls?.[0]?.target
+  if (!t) return n.kind === 'mwlib' ? { text: 'executou', tone: 'muted' } : null
+  const fr = exec.frames.filter((f) => f.parent === null && f.fn === t)
+  if (!fr.length) return null
+  const bad = fr.find((f) => f.exception)
+  if (bad) return { text: `${bad.exception!.type}${bad.exception!.status_code ? ' ' + bad.exception!.status_code : ''}`, tone: 'err' }
+  return { text: fmtUs(fr.reduce((a, f) => a + (frameDurUs(f) ?? 0), 0)), tone: 'ok' }
 }
 
 export function toElements(
@@ -342,8 +360,10 @@ export function toElements(
       if (exec) {
         if (!hasRun) state = 'static'
         else if (ov?.error_node === n.id) state = 'error'
-        else state = count > 0 ? 'visited' : 'dim'
+        else if (count > 0) state = ov?.stale ? 'stale' : 'visited'
+        else state = 'dim'
       }
+      const status = inst.fn === PIPE ? pipeStatus(n, exec) : nodeStatus(n, flow, inst.frame, ov, exec)
       const observed = inst.fn === PIPE ? [] : childFrames.filter((f) => (ov && exec?.overlay?.frames.find((o) => o.id === f.id)?.call_node) === n.id)
       const id = inst.key + '#' + n.id
       const libs = [...new Set((n.calls ?? []).filter((c) => c.kind === 'external' && c.lib).map((c) => c.lib!))]
@@ -365,6 +385,8 @@ export function toElements(
           isRoot: inst.parent === null,
           libs,
           raised,
+          status,
+          subtitle: exec && hasRun ? null : inst.fn === PIPE ? null : staticSubtitle(n, flow),
         } satisfies FlowNodeData,
         draggable: false,
         selected: selected === id,
@@ -382,7 +404,7 @@ export function toElements(
         sourceHandle: 'b',
         targetHandle: 't',
         type: e.kind === 'loop' ? 'default' : 'smoothstep',
-        label: visited && c > 1 ? `${e.label ? e.label + ' ' : ''}×${c}` : e.label || undefined,
+        label: visited && c > 1 ? `${e.label ? branchName(e.label) + ' ' : ''}×${c}` : e.label ? branchName(e.label) : undefined,
         className: cls.join(' '),
         animated: visited,
         zIndex: 1,

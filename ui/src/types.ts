@@ -80,6 +80,8 @@ export interface Meta {
   prefix: string
   sample_rate: number
   route_count: number
+  /** POST /api/replay is enabled (GLOWTRACE_REPLAY=1, development only) */
+  replay_enabled?: boolean
 }
 
 export interface ExecError {
@@ -101,6 +103,13 @@ export interface ExecSummary {
   duration_ms: number
   error: ExecError | null
   frame_count: number
+  /** "replay" when created by POST /api/replay */
+  mode?: 'recorded' | 'replay'
+  replay_of?: string | null
+  /** a few request values that tell executions apart ("cliente=ana · itens[2]") */
+  hint?: string | null
+  /** why a 4xx/5xx was refused ({"detail": ...}) */
+  detail?: string | null
 }
 
 export type ValueSnap = [number, Record<string, unknown>, 'before' | 'after']
@@ -141,6 +150,26 @@ export interface Execution extends ExecSummary {
   response: { headers: Record<string, string>; body: unknown; body_source?: string }
   frames: Frame[]
   overlay?: { frames: FrameOverlay[] }
+  replay_edits?: string[]
+}
+
+export interface ReplaySpec {
+  method: string
+  path: string
+  query?: string
+  headers?: Record<string, string>
+  body?: unknown
+  replay_of?: string | null
+  edits?: string[]
+}
+
+export interface ReplayResult {
+  status: number
+  execution_id: string | null
+  recorded: boolean
+  error: string | null
+  response_size: number
+  response_preview: string
 }
 
 export interface MapData {

@@ -399,3 +399,25 @@ def test_nested_app_defers_to_outer_recorder(make_ez):
     assert r.status_code == 200
     ex = get_execution(c, r)
     assert any(f["fn"].endswith(".ping") for f in ex["frames"])
+
+
+def test_summary_tells_executions_apart_and_fail_filter(make_ez):
+    from examples.loja.main import create_app
+    from fastapi.testclient import TestClient
+
+    app = create_app()
+    make_ez(app)
+    c = TestClient(app, raise_server_exceptions=False)
+    auth = {"Authorization": "Bearer ana.sig.x"}
+    c.post("/pedidos", json={"cliente": "ana", "itens": [{"produto": "camiseta", "qtd": 1}], "cupom": "VIP"}, headers=auth)
+    c.post("/pedidos", json={"cliente": "bia", "itens": [{"produto": "caneca", "qtd": 2}]}, headers=auth)
+    c.get("/quebra")
+    rows = c.get("/_glowtrace/api/executions").json()["executions"]
+    by_hint = {r["hint"]: r for r in rows if r["path"] == "/pedidos"}
+    assert "cliente=ana · itens[1] · cupom=VIP" in by_hint
+    refused = by_hint["cliente=bia · itens[1]"]
+    assert refused["status"] == 422 and refused["detail"] == "sem estoque: caneca"
+    fails = c.get("/_glowtrace/api/executions?status=fail").json()["executions"]
+    assert {r["status"] for r in fails} == {422, 500}
+    errors = c.get("/_glowtrace/api/executions?status=error").json()["executions"]
+    assert 500 in {r["status"] for r in errors} and {r["id"] for r in errors} <= {r["id"] for r in fails}
