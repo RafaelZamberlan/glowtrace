@@ -2,7 +2,7 @@
 // Tabela (records / key-value) and JSON (tree). Search, copy path/value,
 // null / empty / truncated / masked highlighting, guard for very large values.
 import { Fragment, useMemo, useRef, useState } from 'react'
-import { MASK_RE, summarize, typeName } from '../insight'
+import { MASK_RE, jsonInText, summarize, typeName } from '../insight'
 import type { CaptureLimits } from '../types'
 import { JsonView } from './JsonView'
 
@@ -244,6 +244,7 @@ export function DataView({
 }
 
 function SchemaView({ value, root, q, onCopy }: { value: unknown; root: string; q: string; onCopy: (w: string) => void }) {
+  const [openJson, setOpenJson] = useState<Set<string>>(new Set())
   const { rows, more } = useMemo(() => flatten(value, root), [value, root])
   const needle = q.trim().toLowerCase()
   const shown = needle
@@ -253,16 +254,32 @@ function SchemaView({ value, root, q, onCopy }: { value: unknown; root: string; 
   return (
     <div className="dv-schema">
       {shown.slice(0, 600).map((r) => (
+        <Fragment key={r.path}>
         <div
-          key={r.path}
           className={`sr ${r.flags.map((f) => 'f-' + f).join(' ')}`}
           style={{ paddingLeft: needle ? 6 : 6 + (r.depth - 1) * 14 }}
         >
           <span className="sr-k" title={r.path}>
             {needle ? r.path || r.key : r.key}
           </span>
-          <span className="sr-t">{r.type}</span>
+          <span className="sr-t">{r.leaf && jsonInText(r.value) ? 'texto JSON' : r.type}</span>
           <span className="sr-v">{r.leaf ? summarize(r.value, 60) : ''}</span>
+          {r.leaf && jsonInText(r.value) && (
+            <button
+              className="sr-jt"
+              title="este texto contém JSON: ver como árvore"
+              onClick={() =>
+                setOpenJson((prev) => {
+                  const n = new Set(prev)
+                  if (n.has(r.path)) n.delete(r.path)
+                  else n.add(r.path)
+                  return n
+                })
+              }
+            >
+              {openJson.has(r.path) ? 'JSON ▾' : 'JSON ▸'}
+            </button>
+          )}
           {r.flags.includes('null') && <span className="sr-f">nulo</span>}
           {r.flags.includes('empty') && <span className="sr-f">vazio</span>}
           {r.flags.includes('trunc') && (
@@ -297,6 +314,12 @@ function SchemaView({ value, root, q, onCopy }: { value: unknown; root: string; 
             </button>
           </span>
         </div>
+        {openJson.has(r.path) && (
+          <div className="sr-json" style={{ paddingLeft: needle ? 20 : 20 + (r.depth - 1) * 14 }}>
+            <JsonView value={jsonInText(r.value)} />
+          </div>
+        )}
+        </Fragment>
       ))}
       {(shown.length > 600 || more > 0) && <div className="muted dv-more">… mais itens não exibidos (use a busca ou baixe o JSON)</div>}
     </div>

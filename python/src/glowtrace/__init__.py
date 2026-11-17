@@ -1,7 +1,7 @@
 """Glowtrace - see your API as a flow and watch every request run through it."""
 from __future__ import annotations
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 from .core import Glowtrace  # noqa: E402
 from .runtime.capture import CaptureConfig  # noqa: E402

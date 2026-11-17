@@ -34,7 +34,7 @@ provar que funciona. Leia junto com `01-guia-rapido-python.md` (ou `02-guia-rapi
 
 ### 2. Ambiente
 - Python: crie o venv com a versão certa, instale as dependências do projeto e depois
-  `pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.1/glowtrace-0.3.1-py3-none-any.whl"`.
+  `pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.2/glowtrace-0.3.2-py3-none-any.whl"`.
 - Java: baixe https://github.com/RafaelZamberlan/glowtrace/releases/latest/download/glowtrace-agent.jar (ou o kit https://github.com/RafaelZamberlan/glowtrace/releases/latest/download/glowtrace-java-kit.zip); não precisa compilar a lib.
 
 ### 3. Aplicar e subir

@@ -15,9 +15,9 @@ mostrando por onde ela passou (funções, `if/else`, loops, `try/except`, valore
 ## 2. Instalar (no ambiente virtual do SEU projeto)
 
 ```bash
-pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.1/glowtrace-0.3.1-py3-none-any.whl"
+pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.2/glowtrace-0.3.2-py3-none-any.whl"
 # ou com uv:
-uv pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.1/glowtrace-0.3.1-py3-none-any.whl"
+uv pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.2/glowtrace-0.3.2-py3-none-any.whl"
 ```
 
 O pacote se chama `glowtrace` e é importado como `glowtrace`.
@@ -114,6 +114,12 @@ if not glowtrace.is_replay():
 ```
 
 *Copiar como* (cURL, HTTPie, Python requests, fetch) funciona sempre, mesmo sem `GLOWTRACE_REPLAY`.
+
+**O que aparece nos valores:** dicts/listas, dataclasses, Pydantic, attrs, modelos SQLAlchemy (só o que já foi
+carregado), `Row`/`RowMapping`, respostas do Starlette/FastAPI e do httpx/requests (status + corpo já lido),
+`UploadFile` (nome, tamanho, tipo), `Headers`/`QueryParams`/`FormData`, `numpy`/`pandas` (forma + prévia), datas,
+`Decimal`, `UUID`, `Path`. **Não abertos de propósito:** generators/corrotinas (ler consumiria), corpo de
+`StreamingResponse`, objetos que só têm `@property` (ler executaria código) e relações ainda não carregadas do banco.
 
 ## 6. Segurança (leia antes de usar com dados reais)
 

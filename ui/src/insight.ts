@@ -49,6 +49,19 @@ export function summarize(v: unknown, max = 18): string {
   return String(v)
 }
 
+/** A text field that holds JSON ('{"id": ...}'): the parsed object/list, or undefined. */
+export function jsonInText(v: unknown): object | undefined {
+  if (typeof v !== 'string' || v.length < 2 || v.length > 200_000) return undefined
+  const t = v.trim()
+  if (!((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']')))) return undefined
+  try {
+    const p = JSON.parse(t)
+    return p && typeof p === 'object' ? p : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function typeName(v: unknown): string {
   if (v === null || v === undefined) return 'null'
   if (typeof v === 'string') {

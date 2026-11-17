@@ -280,6 +280,23 @@ public final class Capture {
             Optional<?> o = (Optional<?>) v;
             return o.isPresent() ? cap(o.get(), depth, budget) : null;
         }
+        // JDK value holders: read without side effects
+        if (v instanceof java.util.concurrent.atomic.AtomicReference) {
+            return cap(((java.util.concurrent.atomic.AtomicReference<?>) v).get(), depth, budget);
+        }
+        if (v instanceof java.nio.ByteBuffer) return "<bytes " + ((java.nio.ByteBuffer) v).remaining() + ">";
+        if (v instanceof java.util.stream.BaseStream) return "<Stream: não lido (ler consumiria o stream)>";
+        if (v instanceof Iterator) return "<Iterator: não lido (ler consumiria o iterador)>";
+        if (v instanceof java.util.concurrent.Future) return future((java.util.concurrent.Future<?>) v, c, depth, budget);
+        if (v instanceof Map.Entry && cn.startsWith("java.")) {
+            Map.Entry<?, ?> e = (Map.Entry<?, ?>) v;
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("key", cap(e.getKey(), depth + 1, budget));
+            out.put("value", cap(e.getValue(), depth + 1, budget));
+            return out;
+        }
+        // Spring value objects whose toString() is the readable value ("application/json", "nome: DESC"...)
+        if (frameworkValue(cn)) return str(v.toString());
         if (v instanceof Throwable) {
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("__type__", c.getSimpleName());
@@ -373,10 +390,49 @@ public final class Capture {
             out.put("content", cap(readField(v, "content"), depth + 1, budget));
             Object total = readField(v, "total");
             if (total != null) out.put("total", cap(total, depth + 1, budget));
+            Object pageable = readField(v, "pageable");
+            if (pageable != null) out.put("pageable", cap(pageable, depth + 1, budget));
             return out;
         }
-        if (!isProject(cn) && isFramework(cn)) return "<" + c.getSimpleName() + ">";
+        if (isJsonTree(cn)) return jsonTree(v, c, depth, budget);
+        if (cn.startsWith("org.springframework.http.") && cn.endsWith("HttpHeaders")) {
+            Object h = readField(v, "headers"); // Spring 6.1+: no longer a Map itself
+            if (h != null) return cap(h, depth, budget);
+        }
+        if (!isProject(cn) && isFramework(cn) && !isFrameworkData(cn)) return "<" + c.getSimpleName() + ">";
         return object(v, c, depth, budget);
+    }
+
+    /** Jackson 2/3 JsonNode and Gson JsonElement: plain JSON data (no lazy loading), opened like maps/lists. */
+    private static boolean isJsonTree(String cn) {
+        return cn.startsWith("com.fasterxml.jackson.databind.node.") || cn.startsWith("tools.jackson.databind.node.")
+                || cn.startsWith("com.google.gson.Json");
+    }
+
+    private static Object jsonTree(Object v, Class<?> c, int depth, int[] budget) {
+        String sn = c.getSimpleName();
+        if (c.getName().startsWith("com.google.gson.")) {
+            if (sn.equals("JsonNull")) return null;
+            Object kids = readField(v, sn.equals("JsonObject") ? "members" : "elements");
+            if (kids != null) return cap(kids, depth, budget); // the node itself does not count as a level
+            Object val = readField(v, "value");
+            // JsonPrimitive keeps numbers as LazilyParsedNumber: show the number text
+            if (val instanceof Number && !(val instanceof Integer || val instanceof Long || val instanceof Double
+                    || val instanceof Float || val instanceof Short || val instanceof Byte || val instanceof BigDecimal
+                    || val instanceof BigInteger)) return val.toString();
+            return cap(val, depth, budget);
+        }
+        if (sn.equals("NullNode") || sn.equals("MissingNode")) return null;
+        Object kids = readField(v, "_children"); // ObjectNode: Map<String, JsonNode>; ArrayNode: List<JsonNode>
+        if (kids != null) return cap(kids, depth, budget);
+        if (sn.equals("BinaryNode")) {
+            Object data = readField(v, "_data");
+            return data instanceof byte[] ? "<bytes " + ((byte[]) data).length + ">" : "<bytes>";
+        }
+        // TextNode / StringNode, IntNode, LongNode, DoubleNode, DecimalNode, BooleanNode, POJONode...: the value itself
+        Object val = readField(v, "_value");
+        if (val != null) return cap(val, depth, budget);
+        return "<" + sn + ">";
     }
 
     private static boolean safeToString(String cn) {
@@ -385,6 +441,49 @@ public final class Capture {
                 || cn.startsWith("java.util.concurrent.atomic.Atomic") && !cn.contains("Reference") && !cn.contains("Array")
                 || cn.equals("java.io.File") || cn.startsWith("sun.nio.fs.") || cn.equals("java.sql.Date")
                 || cn.equals("java.sql.Timestamp") || cn.equals("java.sql.Time");
+    }
+
+    /** Spring value objects: their toString() is a pure, readable rendering of the value. */
+    private static boolean frameworkValue(String cn) {
+        return cn.equals("org.springframework.http.MediaType") || cn.equals("org.springframework.util.MimeType")
+                || cn.equals("org.springframework.http.HttpMethod") || cn.equals("org.springframework.http.DefaultHttpStatusCode")
+                || cn.equals("org.springframework.data.domain.PageRequest") || cn.startsWith("org.springframework.data.domain.Sort")
+                || cn.equals("org.springframework.data.domain.Unpaged") || cn.startsWith("org.springframework.data.domain.Limit");
+    }
+
+    /** Framework classes that are plain data (no lazy loading, no app context): opened by their fields. */
+    private static final String[] FRAMEWORK_DATA = {"org.springframework.http.ProblemDetail",
+            "org.springframework.validation.", "org.springframework.web.multipart.", "org.springframework.mock.web.MockMultipartFile",
+            "org.springframework.hateoas.", "org.springframework.security.core.", "org.springframework.security.authentication.",
+            "org.springframework.security.oauth2.jwt.", "org.springframework.security.oauth2.core.",
+            "org.springframework.security.oauth2.server.resource.authentication."};
+
+    private static boolean isFrameworkData(String cn) {
+        for (String p : FRAMEWORK_DATA) if (cn.startsWith(p)) return true;
+        return false;
+    }
+
+    /** Future / CompletableFuture: the result only if it is already there (never waits). */
+    private static Object future(java.util.concurrent.Future<?> f, Class<?> c, int depth, int[] budget) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("__type__", c.getSimpleName());
+        try {
+            if (!f.isDone()) {
+                out.put("estado", "pendente");
+            } else if (f.isCancelled()) {
+                out.put("estado", "cancelado");
+            } else {
+                Object r = f.get(0, java.util.concurrent.TimeUnit.NANOSECONDS);
+                out.put("estado", "concluído");
+                out.put("valor", cap(r, depth + 1, budget));
+            }
+        } catch (java.util.concurrent.ExecutionException e) {
+            out.put("estado", "falhou");
+            out.put("exceção", cap(e.getCause(), depth + 1, budget));
+        } catch (Throwable t) {
+            out.put("estado", "desconhecido");
+        }
+        return out;
     }
 
     private static boolean isFramework(String cn) {

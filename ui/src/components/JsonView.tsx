@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { jsonInText } from '../insight'
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -24,6 +25,25 @@ function Scalar({ v }: { v: unknown }) {
 function Entry({ k, v, depth }: { k: string | null; v: unknown; depth: number }) {
   const complex = Array.isArray(v) || isObj(v)
   const [open, setOpen] = useState(depth < 2)
+  const parsed = complex ? undefined : jsonInText(v)
+  if (parsed) {
+    // text that holds JSON: show it as a tree, the raw text one click away
+    return (
+      <div className="j-row">
+        <span className="j-toggle" onClick={() => setOpen(!open)}>
+          {open ? '▾' : '▸'} {k !== null && <span className="j-key">{k}: </span>}
+          <span className="j-meta">texto JSON {Array.isArray(parsed) ? `[${parsed.length}]` : `{${Object.keys(parsed).length}}`}</span>
+        </span>
+        {open ? (
+          <div className="j-children">
+            <Entry k={null} v={parsed} depth={depth + 1} />
+          </div>
+        ) : (
+          <span className="j-str j-clip"> {String(v)}</span>
+        )}
+      </div>
+    )
+  }
   if (!complex) {
     return (
       <div className="j-row">
