@@ -67,7 +67,7 @@ function Shell() {
         setMeta(m)
         setRoutes(r.routes)
         setMws(r.middlewares)
-        document.title = `EasyAPI · ${m.title}`
+        document.title = `Glowtrace · ${m.title}`
         const ex = new URLSearchParams(window.location.hash.slice(1).replace(/^[^&]*&?/, '')).get('exec')
         if (ex) selectExec(ex)
       })
@@ -247,7 +247,7 @@ function Shell() {
   if (error && !meta) {
     return (
       <div className="fatal">
-        <h1>EasyAPI</h1>
+        <h1>Glowtrace</h1>
         <p>{error}</p>
       </div>
     )
@@ -258,7 +258,7 @@ function Shell() {
       <div className="app">
         <header className="top">
           <div className="brand" onClick={() => go({ kind: 'home' })}>
-            <span className="logo">⧉</span> EasyAPI <span className="app-title">{meta?.title}</span>
+            <span className="logo">⧉</span> Glowtrace <span className="app-title">{meta?.title}</span>
           </div>
           <nav className="views">
             <button className={view.kind !== 'map' ? 'on' : ''} onClick={() => (view.kind === 'map' ? go(route ? view : { kind: 'home' }) : null)}>

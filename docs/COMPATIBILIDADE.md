@@ -1,6 +1,6 @@
 # Compatibilidade e testes com APIs reais — 2026-11-12
 
-## 1. Matriz Python × FastAPI (suíte do EasyAPI, 32 testes, ambientes isolados `uv`)
+## 1. Matriz Python × FastAPI (suíte do Glowtrace, 32 testes, ambientes isolados `uv`)
 
 Script: `python/scripts/matrix.py` (também roda no CI: `.github/workflows/ci.yml`).
 
@@ -18,15 +18,15 @@ Script: `python/scripts/matrix.py` (também roda no CI: `.github/workflows/ci.ym
 "lazy", routers incluídos clássicos e o `_IncludedRouter` lazy (FastAPI ≥ 0.16x), backends
 `sys.settrace` (3.10/3.11) e `sys.monitoring` (3.12+).
 
-## 2. Suítes de testes de projetos open source, com o EasyAPI injetado
+## 2. Suítes de testes de projetos open source, com o Glowtrace injetado
 
-Método: rodar a suíte do projeto **sem** e **com** `pytest -p easyapi.pytest_plugin`
-(auto-instrumentação: todo app criado ganha o EasyAPI, toda requisição é gravada) e comparar teste a
+Método: rodar a suíte do projeto **sem** e **com** `pytest -p glowtrace.pytest_plugin`
+(auto-instrumentação: todo app criado ganha o Glowtrace, toda requisição é gravada) e comparar teste a
 teste (JUnit XML). Qualquer teste que passa sem e falha com = bug de transparência. Em seguida,
-`EASYAPI_SELFCHECK=1` reconstrói o overlay de cada execução gravada e conta transições que o grafo
+`GLOWTRACE_SELFCHECK=1` reconstrói o overlay de cada execução gravada e conta transições que o grafo
 estático não explica.
 
-| Projeto | Escopo | Sem EasyAPI | Com EasyAPI | Regressões | Gravado | Transições sem explicação |
+| Projeto | Escopo | Sem Glowtrace | Com Glowtrace | Regressões | Gravado | Transições sem explicação |
 |---|---|---|---|---|---|---|
 | **FastAPI 0.162.5** (suíte oficial, `filterwarnings=error`) | ~1.700 apps de tutorial/teste: deps com yield, background tasks, websockets, sub-apps, segurança, uploads, streaming, SSE | 4.750 ✓ / 22 skip | 4.750 ✓ / 22 skip | **0** | 1.743 apps, 4.635 execuções, 16.596 frames | **0** |
 | **Mealie** (Python 3.14, FastAPI 0.162.2, SQLAlchemy) | 291 rotas, 1.985 `Depends` | 3.703 ✓ / 103 ✗* | 3.703 ✓ / 103 ✗* | **0** | 162.837 frames (integração) | **0** |
@@ -43,9 +43,9 @@ Mapa estático do Mealie: 291 rotas, 614 funções, 4.562 nós, 793 desvios — 
 
 ## 3. Java / Spring Boot (javaagent)
 
-Agente em `java/easyapi-agent` (Byte Buddy + JavaParser, ambos Apache-2.0, realocados no jar): mesmo
+Agente em `java/glowtrace-agent` (Byte Buddy + JavaParser, ambos Apache-2.0, realocados no jar): mesmo
 contrato `docs/IR.md`, mesma UI (o overlay é calculado no navegador). Uso:
-`java -javaagent:easyapi-agent.jar=packages=<pacote>;sources=<src/main/java> -jar app.jar`.
+`java -javaagent:glowtrace-agent.jar=packages=<pacote>;sources=<src/main/java> -jar app.jar`.
 
 | App | Estático | Runtime | Verificação independente (overlay da UI em TS sobre os frames Java) |
 |---|---|---|---|
@@ -77,8 +77,8 @@ verifica invariantes (start/end, arestas válidas, toda linha de statement mapea
 | Saída de `with` contada como salto | suíte do FastAPI (107 casos) | nós ganham `parent` estrutural; revisita do cabeçalho do `with` = saída do bloco |
 | `raise` / `except` que não casa indo para `finally` sem aresta | suíte do FastAPI | arestas de exceção para o `finally` e entre handlers |
 | Auto-instrumentação não pegava `FastAPI` (sobrescreve `build_middleware_stack`) | teste do modo auto | interceptar `Starlette.__call__` |
-| Recursão infinita: o app interno `/_easyapi` se auto-instrumentava | `python -m easyapi run` | app interno marcado e ignorado |
-| CLI usava o `python` do PATH em vez do venv | `python -m easyapi run` | resolver pelo interpretador atual |
+| Recursão infinita: o app interno `/_glowtrace` se auto-instrumentava | `python -m glowtrace run` | app interno marcado e ignorado |
+| CLI usava o `python` do PATH em vez do venv | `python -m glowtrace run` | resolver pelo interpretador atual |
 | Link colado com a aba já aberta não abria a execução (só o hash muda) | UI servida pelo agente Java | escutar `hashchange` |
 | **Java: `ClassFormatError: bad offset for Uninitialized`** em `new X(a, cond ? b : c)` — a sonda de linha ficava entre o rótulo e o `NEW`, e os stack map frames copiados apontavam para ela | API Java real de terceiro (Spring Boot 3.5 / Java 21), reportado por outro agente | sonda emitida logo **depois** do `NEW`; regressão em `demo-loja` (`/diagnostico`) e teste de estresse `java/scripts/stress-instrumentacao.sh`: com o jar antigo o próprio carregador do Spring Boot quebra; com a correção **11.345 classes** (Spring, Jackson, Hibernate, Tomcat, H2, Swagger) instrumentadas, **0 erros**; suíte do petclinic-rest 256/256 com e sem agente |
 
@@ -88,9 +88,9 @@ verifica invariantes (start/end, arestas válidas, toda linha de statement mapea
 cd python
 python scripts/matrix.py --jobs 6                     # matriz completa
 python scripts/fuzz_flow.py <dirs...>                 # fuzz do grafo
-# suíte de terceiros com EasyAPI:
-EASYAPI_ROOTS=<código do projeto> EASYAPI_EXPOSE_HEADER=0 EASYAPI_STORE=memory EASYAPI_SELFCHECK=1 \
-  pytest -p easyapi.pytest_plugin
+# suíte de terceiros com Glowtrace:
+GLOWTRACE_ROOTS=<código do projeto> GLOWTRACE_EXPOSE_HEADER=0 GLOWTRACE_STORE=memory GLOWTRACE_SELFCHECK=1 \
+  pytest -p glowtrace.pytest_plugin
 # qualquer servidor, sem mudar código:
-python -m easyapi run uvicorn main:app
+python -m glowtrace run uvicorn main:app
 ```

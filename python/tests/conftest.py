@@ -11,15 +11,15 @@ if ROOT not in sys.path:
 
 @pytest.fixture
 def make_ez():
-    """Create EasyAPI instances and always uninstall the tracer afterwards."""
-    from easyapi import EasyAPI
+    """Create Glowtrace instances and always uninstall the tracer afterwards."""
+    from glowtrace import Glowtrace
 
     created = []
 
     def _make(app, **kw):
         kw.setdefault("store", "memory")
         kw.setdefault("roots", [ROOT])
-        ez = EasyAPI(app, **kw)
+        ez = Glowtrace(app, **kw)
         created.append(ez)
         return ez
 
@@ -41,8 +41,8 @@ def loja(make_ez):
 
 
 def get_execution(client, response):
-    ex_id = response.headers["x-easyapi-execution"]
-    r = client.get(f"/_easyapi/api/executions/{ex_id}")
+    ex_id = response.headers["x-glowtrace-execution"]
+    r = client.get(f"/_glowtrace/api/executions/{ex_id}")
     assert r.status_code == 200, r.text
     return r.json()
 

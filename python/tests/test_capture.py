@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from easyapi.runtime.capture import Capturer, CaptureConfig
+from glowtrace.runtime.capture import Capturer, CaptureConfig
 
 
 def test_sensitive_keys():

@@ -1,6 +1,6 @@
 package org.example.loja.diag;
 
-/** Casos de bytecode que já quebraram a instrumentação (regressão do EasyAPI). */
+/** Casos de bytecode que já quebraram a instrumentação (regressão do Glowtrace). */
 public record Resumo(String texto, String status) {
 
     /** new X(..., cond ? a : b): frame com objeto não inicializado no meio dos argumentos. */

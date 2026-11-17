@@ -20,7 +20,7 @@ import warnings
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from easyapi.static.flow import build_flow  # noqa: E402
+from glowtrace.static.flow import build_flow  # noqa: E402
 
 warnings.filterwarnings("ignore")
 

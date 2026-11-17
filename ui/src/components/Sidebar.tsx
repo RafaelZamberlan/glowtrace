@@ -115,7 +115,7 @@ export function ExecList({
       ))}
       {items.length === 0 && (
         <div className="muted pad">
-          Nenhuma execução ainda. Faça uma requisição à API (ou envie o header <code>X-EasyAPI-Trace: 1</code> se a amostragem estiver baixa).
+          Nenhuma execução ainda. Faça uma requisição à API (ou envie o header <code>X-Glowtrace-Trace: 1</code> se a amostragem estiver baixa).
         </div>
       )}
     </div>

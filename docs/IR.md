@@ -1,7 +1,7 @@
-# EasyAPI — contrato de dados (Graph IR + execuções)
+# Glowtrace — contrato de dados (Graph IR + execuções)
 
 Qualquer backend de linguagem (Python hoje, Java/Node depois) expõe **as mesmas rotas HTTP** sob
-`<prefix>` (padrão `/_easyapi`) e a mesma UI estática. A UI é agnóstica de linguagem.
+`<prefix>` (padrão `/_glowtrace`) e a mesma UI estática. A UI é agnóstica de linguagem.
 
 ## Rotas HTTP
 
@@ -16,8 +16,8 @@ Qualquer backend de linguagem (Python hoje, Java/Node depois) expõe **as mesmas
 | `DELETE <prefix>/api/executions` | `{deleted: n}` |
 | `GET <prefix>/api/executions/<id>` | `Execution` (campo `overlay` **opcional**: a UI calcula se ausente) |
 
-Acesso: por padrão só loopback; com token configurado, header `X-EasyAPI-Token`, cookie
-`easyapi_token` ou `?token=` (que grava o cookie).
+Acesso: por padrão só loopback; com token configurado, header `X-Glowtrace-Token`, cookie
+`glowtrace_token` ou `?token=` (que grava o cookie).
 
 ## Tipos
 

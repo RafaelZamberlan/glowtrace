@@ -1,17 +1,17 @@
-# EasyAPI para Java (javaagent)
+# Glowtrace para Java (javaagent)
 
-Backend Java do EasyAPI: um **javaagent** que, sem alterar o código da aplicação,
+Backend Java do Glowtrace: um **javaagent** que, sem alterar o código da aplicação,
 
 1. mapeia estaticamente (JavaParser) todos os endpoints Spring MVC em grafos de fluxo estilo n8n
    (if/else, laços, try/catch, switch, chamadas, return, throw);
 2. grava cada requisição real (Byte Buddy): métodos executados, argumentos, retornos, exceções e o
    caminho de nós percorrido em cada função;
 3. serve a mesma UI e o mesmo contrato HTTP/JSON do backend Python (`docs/IR.md`) num servidor
-   embutido (`com.sun.net.httpserver`), em `http://127.0.0.1:7070/_easyapi/`.
+   embutido (`com.sun.net.httpserver`), em `http://127.0.0.1:7070/_glowtrace/`.
 
 ```
 java/
-  easyapi-agent/   agente (jar único com Byte Buddy e JavaParser realocados)
+  glowtrace-agent/   agente (jar único com Byte Buddy e JavaParser realocados)
   demo-loja/       app Spring Boot 3 de exemplo (loja em memória, espelha python/examples/loja)
 ```
 
@@ -20,54 +20,54 @@ java/
 Requer JDK 17+ e Maven 3.9+.
 
 ```bash
-cd java/easyapi-agent
-mvn -q package            # gera target/easyapi-agent.jar
+cd java/glowtrace-agent
+mvn -q package            # gera target/glowtrace-agent.jar
 ```
 
-A UI já compilada (`python/src/easyapi/_ui/`, saída do `npm run build` em `ui/`) é copiada para dentro
+A UI já compilada (`python/src/glowtrace/_ui/`, saída do `npm run build` em `ui/`) é copiada para dentro
 do jar no build. Se ela não existir, o agente serve uma página simples com links para a API JSON.
 
 ## Usar
 
 ```bash
-java -javaagent:easyapi-agent.jar=packages=org.example.app;sources=/caminho/src/main/java;port=7070 \
+java -javaagent:glowtrace-agent.jar=packages=org.example.app;sources=/caminho/src/main/java;port=7070 \
      -jar app.jar
 ```
 
-Depois abra `http://127.0.0.1:7070/_easyapi/`.
+Depois abra `http://127.0.0.1:7070/_glowtrace/`.
 
 | opção (`chave=valor;...`) | variável de ambiente | padrão | descrição |
 |---|---|---|---|
-| `packages` | `EASYAPI_PACKAGES` | inferido de `sources` | pacotes instrumentados (separados por vírgula) |
-| `sources` | `EASYAPI_SOURCES` | `./src/main/java` | raízes de código-fonte (separadas por vírgula) |
-| `port` | `EASYAPI_PORT` | `7070` | porta do servidor da UI/API |
-| `mode` | `EASYAPI_MODE` | `trace` | `trace` (mapa + gravação), `graph` (só mapa), `off` |
-| `token` | `EASYAPI_TOKEN` | — | exige `X-EasyAPI-Token`, cookie `easyapi_token` ou `?token=` |
-| `host` | `EASYAPI_HOST` | `127.0.0.1` (`0.0.0.0` com token) | endereço de bind |
-| `root` | `EASYAPI_ROOT` | pai de `src/main/java` | raiz usada nos caminhos relativos dos `fn_id` |
-| `title` | `EASYAPI_TITLE` | nome da pasta do projeto | título exibido na UI |
-| `generated` | `EASYAPI_GENERATED` | `true` | também indexa `target/generated-sources` (interfaces OpenAPI, MapStruct) |
-| `max_executions` | `EASYAPI_MAX_EXECUTIONS` | `500` | tamanho do buffer circular de execuções |
-| `debug` | `EASYAPI_DEBUG` | `false` | logs detalhados |
+| `packages` | `GLOWTRACE_PACKAGES` | inferido de `sources` | pacotes instrumentados (separados por vírgula) |
+| `sources` | `GLOWTRACE_SOURCES` | `./src/main/java` | raízes de código-fonte (separadas por vírgula) |
+| `port` | `GLOWTRACE_PORT` | `7070` | porta do servidor da UI/API |
+| `mode` | `GLOWTRACE_MODE` | `trace` | `trace` (mapa + gravação), `graph` (só mapa), `off` |
+| `token` | `GLOWTRACE_TOKEN` | — | exige `X-Glowtrace-Token`, cookie `glowtrace_token` ou `?token=` |
+| `host` | `GLOWTRACE_HOST` | `127.0.0.1` (`0.0.0.0` com token) | endereço de bind |
+| `root` | `GLOWTRACE_ROOT` | pai de `src/main/java` | raiz usada nos caminhos relativos dos `fn_id` |
+| `title` | `GLOWTRACE_TITLE` | nome da pasta do projeto | título exibido na UI |
+| `generated` | `GLOWTRACE_GENERATED` | `true` | também indexa `target/generated-sources` (interfaces OpenAPI, MapStruct) |
+| `max_executions` | `GLOWTRACE_MAX_EXECUTIONS` | `500` | tamanho do buffer circular de execuções |
+| `debug` | `GLOWTRACE_DEBUG` | `false` | logs detalhados |
 
-Também valem propriedades de sistema (`-Deasyapi.port=7071`). Precedência: argumentos do agente >
+Também valem propriedades de sistema (`-Dglowtrace.port=7071`). Precedência: argumentos do agente >
 propriedades > ambiente. Sem token, o servidor só escuta e só responde em loopback.
 
-Uma requisição pode pedir para não ser gravada com o header `x-easyapi-trace: 0`. Cada resposta gravada
-recebe o header `x-easyapi-execution: <id>` (desligue com `expose_header=false`).
+Uma requisição pode pedir para não ser gravada com o header `x-glowtrace-trace: 0`. Cada resposta gravada
+recebe o header `x-glowtrace-execution: <id>` (desligue com `expose_header=false`).
 
 Análise estática sem subir a aplicação (útil para depurar o mapa):
 
 ```bash
-java -jar easyapi-agent.jar "sources=/caminho/src/main/java" summary|routes|map|functions
-java -jar easyapi-agent.jar "sources=/caminho/src/main/java" function "src/main/java/a/B.java::B.metodo"
+java -jar glowtrace-agent.jar "sources=/caminho/src/main/java" summary|routes|map|functions
+java -jar glowtrace-agent.jar "sources=/caminho/src/main/java" function "src/main/java/a/B.java::B.metodo"
 ```
 
 ### Demo
 
 ```bash
 cd java/demo-loja && mvn -q package
-java -javaagent:../easyapi-agent/target/easyapi-agent.jar=packages=org.example.loja;sources=src/main/java \
+java -javaagent:../glowtrace-agent/target/glowtrace-agent.jar=packages=org.example.loja;sources=src/main/java \
      -jar target/demo-loja.jar
 curl -X POST localhost:8080/pedidos -H 'Authorization: Bearer joao.x' -H 'Content-Type: application/json' \
      -d '{"cliente":"Ana","itens":[{"produto":"camiseta","qtd":2}],"cupom":"VIP"}'

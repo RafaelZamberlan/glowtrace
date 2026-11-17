@@ -15,7 +15,7 @@
     <artifactId>demo-loja</artifactId>
     <version>0.1.0</version>
     <name>demo-loja</name>
-    <description>Loja demo (Spring Boot, em memória) para testar o agente EasyAPI</description>
+    <description>Loja demo (Spring Boot, em memória) para testar o agente Glowtrace</description>
 
     <properties>
         <java.version>17</java.version>

@@ -46,18 +46,18 @@ def main() -> None:
     app = cpu_app() if os.environ.get("BENCH_CPU") else create_app()
     backend = None
     if mode != "baseline":
-        from easyapi import EasyAPI
+        from glowtrace import Glowtrace
 
         kw = {"store": "memory", "roots": [os.path.dirname(HERE)]}
         if os.environ.get("BENCH_NO_VALUES"):
-            from easyapi import Limits
+            from glowtrace import Limits
 
             kw["limits"] = Limits(max_values=0)
         if mode == "trace-sampled0":
             kw.update(mode="trace", sample_rate=0.0)
         else:
             kw.update(mode=mode)
-        ez = EasyAPI(app, **kw)
+        ez = Glowtrace(app, **kw)
         backend = ez.backend.name if ez.backend else None
 
     async def run() -> list[float]:

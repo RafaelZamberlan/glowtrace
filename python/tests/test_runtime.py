@@ -119,9 +119,9 @@ def test_unhandled_exception_500(loja):
     r = client.get("/quebra")
     assert r.status_code == 500
     ez.store.flush()
-    items = client.get("/_easyapi/api/executions", params={"route": "GET /quebra"}).json()["executions"]
+    items = client.get("/_glowtrace/api/executions", params={"route": "GET /quebra"}).json()["executions"]
     assert items and items[0]["status"] == 500
-    ex = client.get(f"/_easyapi/api/executions/{items[0]['id']}").json()
+    ex = client.get(f"/_glowtrace/api/executions/{items[0]['id']}").json()
     assert ex["error"]["type"] == "KeyError" and ex["error"]["escaped"] is True
     fr = frame_by_fn(ex, "main.py::quebra")
     assert overlay_of(ex, fr)["error_node"] == _node(ez, fr, "return dados['b']")
@@ -180,7 +180,7 @@ def test_concurrent_requests_do_not_mix(make_ez):
     ez.store.flush()
     for i, r in enumerate(responses):
         assert r.status_code == 200, r.text
-        ex = ez.store.get(r.headers["x-easyapi-execution"])
+        ex = ez.store.get(r.headers["x-glowtrace-execution"])
         svc = [f for f in ex["frames"] if f["fn"].endswith("services.py::criar_pedido")]
         assert len(svc) == 1
         assert svc[0]["args"]["pedido"]["cliente"] == f"cli{i}"
@@ -197,19 +197,19 @@ def test_graph_mode_records_nothing(make_ez):
     ez = make_ez(app, mode="graph")
     c = TestClient(app)
     r = c.get("/relatorio")
-    assert r.status_code == 200 and "x-easyapi-execution" not in r.headers
-    routes = c.get("/_easyapi/api/routes").json()["routes"]
+    assert r.status_code == 200 and "x-glowtrace-execution" not in r.headers
+    routes = c.get("/_glowtrace/api/routes").json()["routes"]
     assert {x["id"] for x in routes} >= {"POST /pedidos", "GET /pedidos/{pid}", "GET /relatorio", "GET /quebra"}
 
 
 def test_routes_and_map(loja):
     app, ez, client = loja
-    data = client.get("/_easyapi/api/routes").json()
+    data = client.get("/_glowtrace/api/routes").json()
     post = next(r for r in data["routes"] if r["id"] == "POST /pedidos")
     assert post["handler"].endswith("main.py::criar_pedido")
     assert [d["fn"].split("::")[1] for d in post["dependencies"]] == ["usuario_atual"]
     assert data["middlewares"][0]["fn"].endswith("cabecalhos_seguranca")
-    m = client.get("/_easyapi/api/map").json()
+    m = client.get("/_glowtrace/api/map").json()
     ids = {f["id"].split("::")[1] for f in m["functions"]}
     assert {"criar_pedido", "validar_itens", "calcular_total", "aplicar_cupom", "cobrar", "RepositorioPedidos.salvar"} <= ids
 
@@ -222,7 +222,7 @@ def test_remote_access_denied_without_token(make_ez):
     app = create_app()
     make_ez(app, mode="graph")
     c = remote_client(app)
-    assert c.get("/_easyapi/api/routes").status_code == 403
+    assert c.get("/_glowtrace/api/routes").status_code == 403
 
 
 def test_token_access(make_ez):
@@ -233,11 +233,11 @@ def test_token_access(make_ez):
     app = create_app()
     make_ez(app, mode="graph", token="s3cret")
     c = remote_client(app)
-    assert c.get("/_easyapi/api/routes").status_code == 403
-    assert c.get("/_easyapi/api/routes", headers={"x-easyapi-token": "s3cret"}).status_code == 200
-    r = c.get("/_easyapi/?token=s3cret")
+    assert c.get("/_glowtrace/api/routes").status_code == 403
+    assert c.get("/_glowtrace/api/routes", headers={"x-glowtrace-token": "s3cret"}).status_code == 200
+    r = c.get("/_glowtrace/?token=s3cret")
     assert r.status_code == 200
-    assert c.get("/_easyapi/api/routes").status_code == 200  # cookie set
+    assert c.get("/_glowtrace/api/routes").status_code == 200  # cookie set
 
 
 def test_sampling_and_forced_header(make_ez):
@@ -248,8 +248,8 @@ def test_sampling_and_forced_header(make_ez):
     app = create_app()
     make_ez(app, sample_rate=0.0)
     c = TestClient(app)
-    assert "x-easyapi-execution" not in c.get("/relatorio").headers
-    assert "x-easyapi-execution" in c.get("/relatorio", headers={"x-easyapi-trace": "1"}).headers
+    assert "x-glowtrace-execution" not in c.get("/relatorio").headers
+    assert "x-glowtrace-execution" in c.get("/relatorio", headers={"x-glowtrace-trace": "1"}).headers
 
 
 def test_sqlite_store(tmp_path, make_ez):
@@ -260,9 +260,9 @@ def test_sqlite_store(tmp_path, make_ez):
     app = create_app()
     ez = make_ez(app, store="sqlite", db_path=str(tmp_path / "ez.db"), max_executions=3)
     c = TestClient(app)
-    ids = [c.get("/relatorio", params={"limite": i}).headers["x-easyapi-execution"] for i in range(25)]
+    ids = [c.get("/relatorio", params={"limite": i}).headers["x-glowtrace-execution"] for i in range(25)]
     ez.store.flush()
-    listed = c.get("/_easyapi/api/executions").json()["executions"]
+    listed = c.get("/_glowtrace/api/executions").json()["executions"]
     assert 1 <= len(listed) <= 23  # retention runs every 20 writes
     assert ez.store.get(ids[-1])["route_id"] == "GET /relatorio"
 
@@ -286,7 +286,7 @@ def test_included_router_with_prefix_and_router_dependency(make_ez):
     app.include_router(router, prefix="/v1")
     ez = make_ez(app)
     c = TestClient(app)
-    routes = c.get("/_easyapi/api/routes").json()["routes"]
+    routes = c.get("/_glowtrace/api/routes").json()["routes"]
     r = next(x for x in routes if x["path"] == "/v1/itens/{pid}")
     assert r["handler"].endswith("::test_included_router_with_prefix_and_router_dependency.<locals>.item")
     assert r["tags"] == ["pedidos"]
@@ -335,16 +335,16 @@ def test_awaited_coroutine_chain_returns(make_ez):
 
 
 def test_auto_instrumentation_many_apps_share_one_backend(tmp_path, monkeypatch):
-    """easyapi.auto attaches EasyAPI to every app; tracer and store are shared."""
+    """glowtrace.auto attaches Glowtrace to every app; tracer and store are shared."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from easyapi import auto
-    from easyapi.runtime import backends
+    from glowtrace import auto
+    from glowtrace.runtime import backends
 
-    monkeypatch.setenv("EASYAPI_STORE", "sqlite")
-    monkeypatch.setenv("EASYAPI_DB", str(tmp_path / "auto.db"))
-    monkeypatch.setenv("EASYAPI_ROOTS", str(tmp_path.parent.parent) + __import__("os").pathsep + __import__("os").path.dirname(__file__))
+    monkeypatch.setenv("GLOWTRACE_STORE", "sqlite")
+    monkeypatch.setenv("GLOWTRACE_DB", str(tmp_path / "auto.db"))
+    monkeypatch.setenv("GLOWTRACE_ROOTS", str(tmp_path.parent.parent) + __import__("os").pathsep + __import__("os").path.dirname(__file__))
     try:
         auto.install()
         apps = []
@@ -361,12 +361,12 @@ def test_auto_instrumentation_many_apps_share_one_backend(tmp_path, monkeypatch)
         for app in apps:
             cl = TestClient(app)
             r = cl.get("/x")
-            assert r.status_code == 200 and "x-easyapi-execution" in r.headers
-            # the /_easyapi sub-app must not instrument itself (infinite recursion)
-            assert cl.get("/_easyapi/api/routes").status_code == 200
-            app.state.easyapi.store.flush()  # sqlite writes happen on a background thread
-            assert cl.get(f"/_easyapi/api/executions/{r.headers['x-easyapi-execution']}").status_code == 200
-        created = [a.state.easyapi for a in apps]
+            assert r.status_code == 200 and "x-glowtrace-execution" in r.headers
+            # the /_glowtrace sub-app must not instrument itself (infinite recursion)
+            assert cl.get("/_glowtrace/api/routes").status_code == 200
+            app.state.glowtrace.store.flush()  # sqlite writes happen on a background thread
+            assert cl.get(f"/_glowtrace/api/executions/{r.headers['x-glowtrace-execution']}").status_code == 200
+        created = [a.state.glowtrace for a in apps]
         assert len({id(c.backend) for c in created}) == 1
         assert len({id(c.store) for c in created}) == 1
         created[0].store.flush()
@@ -374,7 +374,7 @@ def test_auto_instrumentation_many_apps_share_one_backend(tmp_path, monkeypatch)
     finally:
         auto.uninstall()
         for a in apps:
-            ez = getattr(a.state, "easyapi", None)
+            ez = getattr(a.state, "glowtrace", None)
             if ez is not None:
                 ez.close()
         assert backends._shared is None

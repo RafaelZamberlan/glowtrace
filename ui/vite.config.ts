@@ -6,11 +6,11 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: '../python/src/easyapi/_ui',
+    outDir: '../python/src/glowtrace/_ui',
     emptyOutDir: true,
     chunkSizeWarningLimit: 1500,
   },
   server: {
-    proxy: { '/_easyapi/api': 'http://127.0.0.1:8000' },
+    proxy: { '/_glowtrace/api': 'http://127.0.0.1:8000' },
   },
 })

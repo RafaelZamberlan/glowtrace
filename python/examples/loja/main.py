@@ -1,7 +1,7 @@
 """Demo shop API used by the tests and the README.
 
 Run:  uvicorn examples.loja.app:app --reload   (from the python/ folder)
-Open: http://127.0.0.1:8000/_easyapi/
+Open: http://127.0.0.1:8000/_glowtrace/
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _dump(model) -> dict:
 
 
 def create_app() -> FastAPI:
-    """Build the demo app *without* EasyAPI (tests install it themselves)."""
+    """Build the demo app *without* Glowtrace (tests install it themselves)."""
     app = FastAPI(title="Loja Demo")
     _register(app)
     return app

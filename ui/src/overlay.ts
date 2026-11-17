@@ -1,4 +1,4 @@
-// Client-side port of python/src/easyapi/overlay.py.
+// Client-side port of python/src/glowtrace/overlay.py.
 // Backends may omit `execution.overlay`; the UI then computes it from the raw
 // frames (path of node indexes) and the static flows. Keep both in sync.
 import type { Execution, FlowNode, FnFlow, FrameOverlay } from './types'

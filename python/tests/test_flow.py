@@ -2,7 +2,7 @@
 import ast
 import textwrap
 
-from easyapi.static.flow import build_flow
+from glowtrace.static.flow import build_flow
 
 
 def flow_of(src: str):
@@ -176,7 +176,7 @@ def test_with_exit_is_not_a_jump():
     """Python re-executes the `with` line to call __exit__; overlay must not flag it."""
     import contextlib
 
-    from easyapi.overlay import _Graph
+    from glowtrace.overlay import _Graph
 
     fl = flow_of(
         """

@@ -1,8 +1,8 @@
-# EasyAPI — Plano do projeto
+# Glowtrace — Plano do projeto
 
 > Veja sua API como um fluxo (estilo n8n) e assista cada requisição atravessá-lo.
 
-Base: relatório de pesquisa em `reports/EasyAPI visualização de fluxos de API.md`
+Base: relatório de pesquisa em `reports/Glowtrace visualização de fluxos de API.md`
 (notas em `research_notes/`).
 
 ---
@@ -12,9 +12,9 @@ Base: relatório de pesquisa em `reports/EasyAPI visualização de fluxos de API
 Uma lib que se pluga em uma linha numa API existente:
 
 ```python
-from easyapi import EasyAPI
+from glowtrace import Glowtrace
 app = FastAPI()
-EasyAPI(app)          # pronto: /_easyapi abre o mapa + execuções
+Glowtrace(app)          # pronto: /_glowtrace abre o mapa + execuções
 ```
 
 Ela entrega duas coisas:
@@ -56,7 +56,7 @@ nó do erro em vermelho, clique no nó → entrada/saída/valores da condição.
 ```
 ┌────────────────────────── processo da API ──────────────────────────┐
 │ FastAPI app                                                          │
-│   └─ EasyAPI(app)                                                    │
+│   └─ Glowtrace(app)                                                    │
 │        ├─ discover/  rotas + Depends + middlewares do app vivo       │
 │        ├─ static/    AST → FlowGraph por função + resolvedor de      │
 │        │             chamadas (globals vivos > imports > dinâmico)   │
@@ -65,7 +65,7 @@ nó do erro em vermelho, clique no nó → entrada/saída/valores da condição.
 │        │               • sys.settrace (3.10–3.11) fallback           │
 │        │             safe_repr (sem side-effects) + redact (PII)     │
 │        ├─ store/     SQLite (thread escritora, retenção N/TTL)       │
-│        └─ server/    /_easyapi  (JSON API + UI estática embutida)    │
+│        └─ server/    /_glowtrace  (JSON API + UI estática embutida)    │
 └──────────────────────────────────────────────────────────────────────┘
           │ (fase 3) OTLP: cada frame vira span com atributos code.* (estáveis)
           ▼
@@ -137,8 +137,8 @@ Loops = visitas repetidas na cabeça do loop (contador de iterações). Branch t
 - Redação in-process antes de armazenar: chaves (password/senha/token/secret/authorization/cookie/
   api_key/client_secret/cpf/cnpj/cartao/cvv/…), padrões (CPF/CNPJ com DV, cartão Luhn, JWT, Bearer).
 - Limites: profundidade, itens, tamanho de string, bytes por valor e frames por execução.
-- Retenção: N execuções (padrão 500) + TTL; `easyapi purge`.
-- UI/API `/_easyapi`: por padrão **só loopback**; fora disso exige `EASYAPI_TOKEN`
+- Retenção: N execuções (padrão 500) + TTL; `glowtrace purge`.
+- UI/API `/_glowtrace`: por padrão **só loopback**; fora disso exige `GLOWTRACE_TOKEN`
   ou callback `auth=`. Em produção, modo recomendado: `graph` + `trace` amostrado.
 - LGPD: minimização (Art. 6 III), eliminação (Art. 16), segurança by design (Art. 46).
 
@@ -147,17 +147,17 @@ Loops = visitas repetidas na cabeça do loop (contador de iterações). Branch t
 | Fase | Entrega | Status |
 |---|---|---|
 | **0 — Pesquisa e plano** | relatório + este plano | ✅ |
-| **1 — POC Python/FastAPI** | static (rotas, Depends, middlewares, CFG, resolvedor), runtime (2 backends), redação, SQLite, `/_easyapi` + UI React Flow, testes, validação numa API interna real (2 serviços) em branch | ✅ ver `docs/VALIDACAO.md` |
+| **1 — POC Python/FastAPI** | static (rotas, Depends, middlewares, CFG, resolvedor), runtime (2 backends), redação, SQLite, `/_glowtrace` + UI React Flow, testes, validação numa API interna real (2 serviços) em branch | ✅ ver `docs/VALIDACAO.md` |
 | 2 — Mapa da API | visão "call graph" da API inteira (módulos → funções), busca, arestas observadas mescladas, diff de código vs execução | parcial (mapa + filtro + arestas observadas prontos) |
-| 3 — Produção | OTLP export (spans `code.*`), propagação de `traceparent` entre serviços, amostragem por rota, circuit breaker de overhead, CLI `easyapi graph app:app`, colapso automático de execuções grandes | amostragem, header sob demanda, retenção e tracer sob demanda prontos |
-| 4 — Ecossistema Python | Flask, Django/DRF, Starlette, Litestar; SQL/HTTP outbound como nós; Celery | auto-instrumentação (`python -m easyapi run`, plugin pytest) ✅; matriz 3.10–3.15 × FastAPI 0.95–0.162 ✅ |
+| 3 — Produção | OTLP export (spans `code.*`), propagação de `traceparent` entre serviços, amostragem por rota, circuit breaker de overhead, CLI `glowtrace graph app:app`, colapso automático de execuções grandes | amostragem, header sob demanda, retenção e tracer sob demanda prontos |
+| 4 — Ecossistema Python | Flask, Django/DRF, Starlette, Litestar; SQL/HTTP outbound como nós; Celery | auto-instrumentação (`python -m glowtrace run`, plugin pytest) ✅; matriz 3.10–3.15 × FastAPI 0.95–0.162 ✅ |
 | 5 — Java | agent ByteBuddy (calls/args) + ASM probes (branches), JavaParser p/ Spring; mesmo IR/UI | POC ✅ (petclinic-rest); falta: locais, WebFlux/@Async, corpo de request |
 | 6 — Node/TS | AsyncLocalStorage + plugin SWC/Babel; Express/NestJS | |
 | 7 — Governança | Apache-2.0, DCO, Scorecard, releases assinados, docs site | |
 
 ## 7. Critérios de sucesso da Fase 1
 
-1. `EasyAPI(app)` numa API interna real (~130 endpoints) sobe sem erro e gera o mapa de todas as rotas.
+1. `Glowtrace(app)` numa API interna real (~130 endpoints) sobe sem erro e gera o mapa de todas as rotas.
 2. Uma requisição real produz execução com: middlewares → endpoint → serviços, branch tomado em cada `if`,
    iterações de loop, args/retornos redigidos, e o ponto exato da exceção quando há erro.
 3. Requisições concorrentes não se misturam (async e sync/threadpool).
@@ -166,6 +166,6 @@ Loops = visitas repetidas na cabeça do loop (contador de iterações). Branch t
 
 ## 8. Questões em aberto
 
-- Nome no PyPI: `easyapi` está ocupado (pacote abandonado de 2014). Opções: reclamar via PEP 541,
-  ou publicar como `easyapi-flow` mantendo `import easyapi`.
+- Nome: o projeto se chama **Glowtrace** (nome livre no PyPI, npm e Maven em 2026-11). Pacote Python
+  `glowtrace` (`import glowtrace`), agente Java `io.glowtrace` / `glowtrace-agent.jar`.
 - Hospedagem/organização no GitHub e governança (individual vs. empresa).

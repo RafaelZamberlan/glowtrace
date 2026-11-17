@@ -1,8 +1,8 @@
 import type { ExecSummary, Execution, FnFlow, MapData, Meta, MiddlewareInfo, RouteInfo } from './types'
 
-// When served by the Python package the UI lives at <prefix>/ (e.g. /_easyapi/).
+// When served by the Python package the UI lives at <prefix>/ (e.g. /_glowtrace/).
 export const BASE = import.meta.env.DEV
-  ? '/_easyapi'
+  ? '/_glowtrace'
   : window.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')
 
 async function get<T>(path: string, init?: RequestInit): Promise<T> {

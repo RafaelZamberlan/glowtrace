@@ -5,12 +5,13 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.easyapi/
+.glowtrace/
 node_modules/
 ui/dist/
 .pytest_cache/
 .sandbox/
-python/src/easyapi/_ui/*
-!python/src/easyapi/_ui/.gitkeep
+python/src/glowtrace/_ui/*
+!python/src/glowtrace/_ui/.gitkeep
 java/**/target/
 .claude/
+.easyapi/

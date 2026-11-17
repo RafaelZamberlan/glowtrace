@@ -8,7 +8,7 @@
 |---|---|
 | Sistema alvo | monorepo com **dois serviços FastAPI** (uma API de negócio e um serviço de autenticação) |
 | Isolamento git | `git worktree` num branch novo; o branch de trabalho (com alterações locais não commitadas) **não foi tocado** |
-| Mudança no código alvo | 7 linhas no fim de cada `main.py`, **opt-in** (`EASYAPI_ENABLED=1`); sem a variável nada muda |
+| Mudança no código alvo | 7 linhas no fim de cada `main.py`, **opt-in** (`GLOWTRACE_ENABLED=1`); sem a variável nada muda |
 | Python | 3.11 (igual à imagem Docker do projeto) → backend `sys.settrace` |
 | FastAPI | API de negócio 0.135 (pinado); autenticação 0.162 (formato novo `_IncludedRouter`) |
 | Rede | um script de execução força **todas** as conexões (bancos, cache, provedor de identidade, servidor de mapas, LLM, arquivos) para `127.0.0.1` em porta morta **antes** de importar o app. Os `.env` versionados do projeto apontavam para bancos compartilhados — `python-dotenv` não sobrescreve variáveis já definidas, então nunca foram usados. Nenhum banco/serviço real foi contatado. |

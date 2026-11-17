@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * Loja demo (espelha python/examples/loja). Rodar com o agente:
- * java -javaagent:easyapi-agent.jar=packages=org.example.loja;sources=src/main/java -jar target/demo-loja.jar
+ * java -javaagent:glowtrace-agent.jar=packages=org.example.loja;sources=src/main/java -jar target/demo-loja.jar
  */
 @SpringBootApplication
 public class LojaApplication {
