@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: py${{ matrix.python }} / fastapi ${{ matrix.fastapi }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
+        fastapi: ["0.95.2", "0.100.1", "0.115.14", "0.135.4", "latest"]
+        include:
+          - { os: windows-latest, python: "3.11", fastapi: "latest" }
+          - { os: windows-latest, python: "3.13", fastapi: "latest" }
+          - { os: macos-latest, python: "3.13", fastapi: "latest" }
+          - { os: ubuntu-latest, python: "3.15", fastapi: "latest" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Test
+        working-directory: python
+        shell: bash
+        run: |
+          FA="fastapi"; [ "${{ matrix.fastapi }}" != "latest" ] && FA="fastapi==${{ matrix.fastapi }}"
+          HTTPX="httpx"; case "${{ matrix.fastapi }}" in 0.95.*|0.100.*|0.115.*) HTTPX="httpx<0.28";; esac
+          uv run --no-project --isolated --python ${{ matrix.python }} \
+            --with "$FA" --with "$HTTPX" --with pytest --with-editable . \
+            -- python -m pytest -q -W ignore::DeprecationWarning tests
+
+  flow-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build flows for every function of the stdlib and check invariants
+        working-directory: python
+        run: |
+          STD=$(uv run --no-project --python 3.14 python -c "import sysconfig;print(sysconfig.get_paths()['stdlib'])")
+          uv run --no-project --python 3.14 python scripts/fuzz_flow.py "$STD" | tee fuzz.txt
+          grep -q "OK: no invariant violations" fuzz.txt
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - working-directory: ui
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run build

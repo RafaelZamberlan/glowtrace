@@ -1,0 +1,75 @@
+# EasyAPI — guia rápido (Java / Spring Boot)
+
+Mesmo resultado do Python (mapa de rotas + gravação de cada requisição, mesma interface), via
+**javaagent**: nenhuma linha do projeto muda.
+
+## 1. Requisitos
+
+- JDK **17+**, app **Spring Boot** com Spring MVC (servlet / Tomcat)
+- O código-fonte do app no disco (o mapa é montado lendo `src/main/java`)
+
+## 2. O agente
+
+Baixe o arquivo pronto (não precisa compilar nada) para uma pasta sem espaços, ex. `C:\easyapi\`:
+https://github.com/RafaelZamberlan/easyapi/releases/latest/download/easyapi-agent.jar
+
+Ou o kit completo (jar + atalhos + LEIAME): https://github.com/RafaelZamberlan/easyapi/releases/latest/download/easyapi-java-kit.zip
+
+## 3. Aplicar — escolha uma forma
+
+```bash
+# jar empacotado
+java "-javaagent:C:/easyapi/easyapi-agent.jar=packages=com.minhaempresa.app;sources=C:/caminho/do/projeto/src/main/java" -jar target/app.jar
+
+# Maven
+mvn spring-boot:run "-Dspring-boot.run.jvmArguments=-javaagent:C:/easyapi/easyapi-agent.jar=packages=com.minhaempresa.app;sources=src/main/java"
+
+# java -jar / script / container: variável de ambiente lida pela JVM
+JAVA_TOOL_OPTIONS="-javaagent:C:/easyapi/easyapi-agent.jar=packages=com.minhaempresa.app;sources=C:/caminho/src/main/java"
+```
+
+> ⚠️ **Não** use `JAVA_TOOL_OPTIONS` com `mvn`/`gradle`: a JVM do próprio Maven/Gradle também carrega o
+> agente e ocupa a porta da interface antes do app. Use `-Dspring-boot.run.jvmArguments` (Maven) ou
+> gere o jar e rode com `java -javaagent:... -jar` (Gradle). Na IDE, cole o `-javaagent:...` em "VM options".
+
+**Para outro PC:** use o kit portátil https://github.com/RafaelZamberlan/easyapi/releases/latest/download/easyapi-java-kit.zip
+(jar + atalhos + `LEIAME.md`). Rodando de dentro da pasta do projeto, basta
+`java -javaagent:C:\easyapi\easyapi-agent.jar -jar target\app.jar` — o agente acha `src/main/java` e o pacote sozinho.
+
+- `packages` = pacote raiz do **seu** código (o que será instrumentado). Ex.: `org.springframework.samples.petclinic`.
+- `sources` = pasta `src/main/java` do projeto (caminho absoluto é mais seguro).
+- No PowerShell, coloque o argumento `-javaagent:...` entre aspas por causa do `;`.
+
+## 4. Ver
+
+A interface sobe numa **porta própria**: **http://127.0.0.1:7070/_easyapi/** (troque com `port=7071`
+no argumento do agente). Faça requisições à API e abra a aba **Execuções**.
+
+## 5. Opções (dentro do argumento, `chave=valor;chave=valor`)
+
+| Opção | Padrão | Para quê |
+|---|---|---|
+| `packages` | inferido de `sources` | pacotes instrumentados (vírgula separa vários) |
+| `sources` | `./src/main/java` | código-fonte para o mapa |
+| `port` | `7070` | porta da interface |
+| `mode` | `trace` | `graph` (só mapa), `trace`, `off` |
+| `token` | — | exige token para acesso fora do localhost |
+| `generated` | `true` | também lê `target/generated-sources` (interfaces OpenAPI, MapStruct) |
+| `max_executions` | `500` | execuções guardadas em memória |
+
+Header `x-easyapi-trace: 0` numa requisição evita gravá-la.
+
+## 6. Limitações atuais
+
+- Não captura variáveis locais (argumentos, retornos e exceções sim).
+- Corpo: reconstruído do parâmetro `@RequestBody` e do retorno do controller (já com redação); o corpo bruto
+  não é lido, então requisições que falham antes do controller (ex.: JSON inválido) aparecem como "não capturado".
+- Só Spring MVC/servlet: WebFlux, `@Async` e `CompletableFuture` não são gravados.
+- Validação feita pelo Spring antes do seu código (ex.: `@Valid` falhando) aparece só como status 4xx.
+
+## 7. Conferir
+
+```bash
+# no kit: C:\easyapi\verificar.ps1   |   ou, com Python: https://github.com/RafaelZamberlan/easyapi/releases/latest/download/verificar_easyapi.py
+python verificar_easyapi.py http://127.0.0.1:7070 --min-executions 1
+```

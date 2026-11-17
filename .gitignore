@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+*.egg-info/
+dist/
+build/
+.easyapi/
+node_modules/
+ui/dist/
+.pytest_cache/
+.sandbox/
+python/src/easyapi/_ui/*
+!python/src/easyapi/_ui/.gitkeep
+java/**/target/
+.claude/
