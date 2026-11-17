@@ -1,6 +1,7 @@
 import { Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
+import { severity } from './insight'
 import { computeOverlay } from './overlay'
 import { ActionsCtx, nodeTypes, type Actions } from './components/FlowNodes'
 import { Inspector, type Selection } from './components/Inspector'
@@ -19,14 +20,23 @@ function readHash(): View {
   return { kind: 'home' }
 }
 
-function writeHash(v: View, exec?: string | null) {
+/** Navigation is pushed to the browser history (Back works); internal syncs replace. */
+function writeHash(v: View, exec?: string | null, mode: 'push' | 'replace' = 'push') {
   let h = ''
   if (v.kind === 'route') h = 'route=' + v.route
   else if (v.kind === 'fn') h = 'fn=' + v.fn
   else if (v.kind === 'map') h = 'map'
   if (exec) h += '&exec=' + exec
   const next = '#' + encodeURIComponent(h).replace(/%3D/g, '=').replace(/%26/g, '&')
-  if (window.location.hash !== next) history.replaceState(null, '', next)
+  if (window.location.hash === next) return
+  if (mode === 'push') history.pushState(null, '', next)
+  else history.replaceState(null, '', next)
+}
+
+const READABLE_ZOOM = 0.6
+
+function isFailure(e: ExecSummary): boolean {
+  return !!e.error || (e.status ?? 0) >= 400
 }
 
 export default function App() {
@@ -58,6 +68,13 @@ function Shell() {
   const [exec, setExec] = useState<Execution | null>(null)
   const [sel, setSel] = useState<Selection | null>(null)
   const [mapData, setMapData] = useState<MapData | null>(null)
+  // node to bring into view once it is placed (navigation from panels, "ir ao erro")
+  const [focus, setFocus] = useState<{ instKey: string; nodeId: number } | null>(null)
+  const lastFocusAt = useRef(0)
+  const flowsRef = useRef(flows)
+  flowsRef.current = flows
+  const execRef = useRef(exec)
+  execRef.current = exec
   const rf = useReactFlow()
 
   // boot
@@ -69,7 +86,7 @@ function Shell() {
         setMws(r.middlewares)
         document.title = `Glowtrace · ${m.title}`
         const ex = new URLSearchParams(window.location.hash.slice(1).replace(/^[^&]*&?/, '')).get('exec')
-        if (ex) selectExec(ex)
+        if (ex) selectExec(ex, { keepView: readHash().kind === 'fn', history: 'replace' })
       })
       .catch((e) => setError(String(e.message || e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,11 +94,16 @@ function Shell() {
 
   // shared links pasted into an already-open tab only change the hash
   useEffect(() => {
+    // also fires on browser Back/Forward between our own history entries
     const onHash = () => {
       setView(readHash())
+      setSel(null)
+      setToggled(new Map())
+      setRunSel(new Map())
       const ex = new URLSearchParams(window.location.hash.slice(1).replace(/^[^&]*&?/, '')).get('exec')
-      if (ex) selectExec(ex)
-      else setExec(null)
+      if (ex) {
+        if (ex !== execRef.current?.id) selectExec(ex, { keepView: true })
+      } else setExec(null)
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -94,8 +116,9 @@ function Shell() {
   const refreshExecs = useCallback(() => {
     const rid = onlyRoute && view.kind === 'route' ? view.route : null
     api
-      .executions(rid, onlyErr ? 'error' : null)
-      .then((r) => setExecs(r.executions))
+      .executions(rid, onlyErr ? 'fail' : null)
+      // backends that don't know "fail" return everything: filter here too
+      .then((r) => setExecs(onlyErr ? r.executions.filter(isFailure) : r.executions))
       .catch(() => {})
   }, [onlyRoute, onlyErr, view])
   useEffect(() => {
@@ -111,18 +134,20 @@ function Shell() {
     const newest = execs[0]
     if (newest.id !== lastLive.current) {
       lastLive.current = newest.id
-      selectExec(newest.id)
+      selectExec(newest.id, { history: 'replace' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [execs, live])
 
   const counts = useMemo(() => {
-    const m = new Map<string, { n: number; err: number }>()
+    const m = new Map<string, { n: number; err: number; rej: number }>()
     for (const e of execs) {
       if (!e.route_id) continue
-      const c = m.get(e.route_id) ?? { n: 0, err: 0 }
+      const c = m.get(e.route_id) ?? { n: 0, err: 0, rej: 0 }
       c.n++
-      if (e.error || (e.status ?? 0) >= 500) c.err++
+      const sv = severity(e)
+      if (sv === 'err') c.err++
+      else if (sv === 'rej') c.rej++
       m.set(e.route_id, c)
     }
     return m
@@ -172,31 +197,108 @@ function Shell() {
   const selectedId = sel && 'instKey' in sel ? `${sel.instKey}#${sel.nodeId}` : null
   const { nodes, edges } = useMemo(() => toElements(placed, activeExec, selectedId), [placed, activeExec, selectedId])
 
-  // fit view when the root/execution changes
+  // first view of a route/execution: the whole graph only if it stays readable; otherwise
+  // start reading at a legible zoom - at the error, or where the request enters (top-left)
   const fitKey = `${rootFn}|${activeExec?.id ?? ''}|${placed.length}`
   useEffect(() => {
     if (!placed.length) return
-    const t = setTimeout(() => rf.fitView({ padding: 0.08, duration: 300, maxZoom: 1 }), 180)
+    if (Date.now() - lastFocusAt.current < 2000) return // navigating to a node: keep it centered
+    const t = setTimeout(() => {
+      const el = document.querySelector('.flowwrap') as HTMLElement | null
+      const W = el?.clientWidth || 900
+      const H = el?.clientHeight || 600
+      let x0 = Infinity
+      let y0 = Infinity
+      let x1 = -Infinity
+      let y1 = -Infinity
+      for (const p of placed) {
+        x0 = Math.min(x0, p.x)
+        y0 = Math.min(y0, p.y)
+        x1 = Math.max(x1, p.x + p.layout.w)
+        y1 = Math.max(y1, p.y + p.layout.h)
+      }
+      const fit = Math.min(W / ((x1 - x0) * 1.1), H / ((y1 - y0) * 1.1))
+      if (fit >= READABLE_ZOOM) {
+        rf.fitView({ padding: 0.06, duration: 250, maxZoom: 1 })
+        return
+      }
+      const err = activeExec?.error ? errorTarget() : null
+      if (err) {
+        const box = err.p.layout.pos.get(err.node)!
+        rf.setCenter(err.p.x + box.x + box.w / 2, err.p.y + box.y + box.h / 2, { zoom: 0.9, duration: 250 })
+      } else rf.setViewport({ x: -x0 * 0.85 + 28, y: -y0 * 0.85 + 20, zoom: 0.85 }, { duration: 250 })
+    }, 180)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey])
 
+  function errorTarget(): { p: (typeof placed)[number]; node: number } | null {
+    const origin = activeExec?.error?.frame
+    const p = placed.find((x) => x.inst.frame && x.inst.frame.id === origin) ?? placed.find((x) => x.inst.frame?.exception)
+    const node = p?.inst.ov?.error_node
+    return p && node !== undefined && p.layout.pos.has(node) ? { p, node } : null
+  }
+
+  // Esc closes the open panel (the replay dialog handles its own Esc)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('.modal-back')) return
+      const a = document.activeElement as HTMLElement | null
+      if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return
+      setSel(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    if (!focus) return
+    const p = placed.find((x) => x.inst.key === focus.instKey)
+    const box = p?.layout.pos.get(focus.nodeId)
+    if (!p || !box) return
+    lastFocusAt.current = Date.now()
+    rf.setCenter(p.x + box.x + box.w / 2, p.y + box.y + box.h / 2, { zoom: Math.max(rf.getZoom(), 0.85), duration: 400 })
+    setFocus(null)
+  }, [focus, placed, rf])
+
   // actions
   const actions: Actions = useMemo(
     () => ({
-      toggle: (instKey, nodeId, targets, open) =>
+      toggle: (instKey, nodeId, targets, open) => {
         setToggled((prev) => {
           const m = new Map(prev)
           targets.forEach((t) => m.set(`${instKey}/${nodeId}:${t}`, open))
           return m
-        }),
+        })
+        lastFocusAt.current = Date.now() // keep the zoom; show the opened function instead of refitting
+        if (open && targets.length) {
+          const fn = targets[0]
+          const start = flowsRef.current.get(fn)?.nodes.find((n) => n.kind === 'start')?.id ?? 0
+          setFocus({ instKey: `${instKey}/${nodeId}:${fn}`, nodeId: start })
+        }
+      },
       setRun: (instKey, run) =>
         setRunSel((prev) => {
           const m = new Map(prev)
           m.set(instKey, run)
           return m
         }),
-      openFn: (fn) => go({ kind: 'fn', fn }),
+      // keep the execution when it ran this function, so its values stay visible
+      openFn: (fn) => go({ kind: 'fn', fn }, !!execRef.current?.frames.some((f) => f.fn === fn)),
+      select: (instKey, nodeId) => {
+        lastFocusAt.current = Date.now()
+        setSel({ instKey, nodeId })
+        setFocus({ instKey, nodeId })
+      },
+      openCall: (instKey, nodeId, fn, run) => {
+        const key = `${instKey}/${nodeId}:${fn}`
+        const start = flowsRef.current.get(fn)?.nodes.find((n) => n.kind === 'start')?.id ?? 0
+        lastFocusAt.current = Date.now()
+        setToggled((prev) => new Map(prev).set(key, true))
+        setRunSel((prev) => new Map(prev).set(key, run))
+        setSel({ instKey: key, nodeId: start })
+        setFocus({ instKey: key, nodeId: start })
+      },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -208,12 +310,24 @@ function Shell() {
     setRunSel(new Map())
     setSel(null)
     if (!keepExec) setExec(null)
-    writeHash(v, keepExec ? exec?.id : null)
+    writeHash(v, keepExec ? execRef.current?.id : null)
   }
 
+  const mapLoading = useRef(false)
+  const needMap = useCallback(() => {
+    if (mapLoading.current) return
+    mapLoading.current = true
+    api
+      .map()
+      .then(setMapData)
+      .catch((e) => setError(String(e.message || e)))
+      .finally(() => {
+        mapLoading.current = false
+      })
+  }, [])
   useEffect(() => {
-    if (view.kind === 'map' && !mapData) api.map().then(setMapData).catch((e) => setError(String(e.message || e)))
-  }, [view.kind, mapData])
+    if (view.kind === 'map' && !mapData) needMap()
+  }, [view.kind, mapData, needMap])
 
   async function withOverlay(ex: Execution): Promise<Execution> {
     if (ex.overlay) return ex
@@ -226,7 +340,7 @@ function Shell() {
     return { ...ex, overlay: computeOverlay(ex, all) }
   }
 
-  function selectExec(id: string) {
+  function selectExec(id: string, opts: { keepView?: boolean; history?: 'push' | 'replace' } = {}) {
     api
       .execution(id)
       .then(withOverlay)
@@ -235,14 +349,23 @@ function Shell() {
         setRunSel(new Map())
         setToggled(new Map())
         setSel(null)
-        if (ex.route_id) {
+        if (!opts.keepView && ex.route_id) {
           const v: View = { kind: 'route', route: ex.route_id }
           setView(v)
-          writeHash(v, ex.id)
+          writeHash(v, ex.id, opts.history ?? 'push')
         }
       })
       .catch((e) => setError(String(e.message || e)))
   }
+
+  const wide = useMemo(() => {
+    if (!sel || !('instKey' in sel)) return false
+    const p = placed.find((x) => x.inst.key === sel.instKey)
+    return !!p && p.flow.id !== PIPE && p.flow.nodes[sel.nodeId]?.kind === 'start'
+  }, [sel, placed])
+  const inspector = sel && view.kind !== 'map' && (
+    <Inspector sel={sel} placed={placed} exec={activeExec} meta={meta} flows={allFlows} onClose={() => setSel(null)} onOpenExec={(id) => selectExec(id)} />
+  )
 
   if (error && !meta) {
     return (
@@ -273,8 +396,9 @@ function Shell() {
               <>
                 <span className="pill">{meta.route_count} rotas</span>
                 <span className={`pill mode-${meta.mode}`}>{meta.mode === 'trace' ? 'gravando execuções' : meta.mode}</span>
-                {meta.backend && <span className="pill dim">{meta.backend}</span>}
-                <span className="pill dim">{meta.runtime ?? `python ${meta.python}`}</span>
+                <span className="pill dim" title={meta.backend ? `mecanismo de gravação: ${meta.backend}` : undefined}>
+                  {meta.runtime ?? `python ${meta.python}`}
+                </span>
               </>
             )}
             <label className={`live ${live ? 'on' : ''}`} title="acompanhar a execução mais recente automaticamente">
@@ -295,7 +419,15 @@ function Shell() {
               </button>
             </div>
             {tab === 'routes' ? (
-              <RoutesList routes={routes} selected={view.kind === 'route' ? view.route : null} onSelect={(id) => go({ kind: 'route', route: id })} counts={counts} />
+              <RoutesList
+                routes={routes}
+                selected={view.kind === 'route' ? view.route : null}
+                onSelect={(id) => go({ kind: 'route', route: id })}
+                counts={counts}
+                map={mapData}
+                onNeedMap={needMap}
+                onOpenFn={(fn) => actions.openFn(fn)}
+              />
             ) : (
               <>
                 <div className="filters">
@@ -303,7 +435,7 @@ function Shell() {
                     <input type="checkbox" checked={onlyRoute} onChange={(e) => setOnlyRoute(e.target.checked)} /> só a rota aberta
                   </label>
                   <label>
-                    <input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} /> só erros
+                    <input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} /> só falhas (4xx/5xx)
                   </label>
                   <button
                     className="link"
@@ -314,7 +446,7 @@ function Shell() {
                     limpar
                   </button>
                 </div>
-                <ExecList items={execs} selected={exec?.id ?? null} onSelect={selectExec} />
+                <ExecList items={execs} selected={exec?.id ?? null} onSelect={(id) => selectExec(id)} />
               </>
             )}
           </aside>
@@ -327,7 +459,7 @@ function Shell() {
                 <div className="empty">Analisando a API…</div>
               )
             ) : view.kind === 'home' ? (
-              <Home meta={meta} routes={routes} execs={execs} onRoute={(id) => go({ kind: 'route', route: id })} onExec={selectExec} />
+              <Home meta={meta} routes={routes} execs={execs} onRoute={(id) => go({ kind: 'route', route: id })} onExec={(id) => selectExec(id)} />
             ) : (
               <>
                 {activeExec && (
@@ -335,6 +467,20 @@ function Shell() {
                     <StatusChip s={activeExec.status} err={!!activeExec.error} />
                     <MethodChip m={activeExec.method} />
                     <span className="ep">{activeExec.path}</span>
+                    {activeExec.mode === 'replay' && (
+                      <span
+                        className="replay-chip"
+                        title={activeExec.replay_edits?.length ? 'editado: ' + activeExec.replay_edits.join(', ') : 'reenvio sem alterações'}
+                        onClick={() => activeExec.replay_of && activeExec.replay_of !== 'manual' && selectExec(activeExec.replay_of)}
+                      >
+                        ↻ replay de #{(activeExec.replay_of ?? 'manual').slice(0, 8)}
+                      </span>
+                    )}
+                    {activeExec.mode === 'replay' && activeExec.replay_of && activeExec.replay_of !== 'manual' && (
+                      <button className="cmp" onClick={() => setSel({ special: 'compare' })} title="o que mudou entre o original e este reenvio">
+                        comparar com original
+                      </button>
+                    )}
                     <span className="muted">{activeExec.duration_ms.toFixed(1)} ms · {ago(activeExec.started_at)} · {activeExec.frame_count} funções</span>
                     {activeExec.error && (
                       <span className="eb">
@@ -346,14 +492,8 @@ function Shell() {
                       <button
                         className="danger"
                         onClick={() => {
-                          const origin = activeExec.error?.frame
-                          const p = placed.find((x) => x.inst.frame && x.inst.frame.id === origin) ?? placed.find((x) => x.inst.frame?.exception)
-                          const node = p?.inst.ov?.error_node
-                          const box = node !== undefined ? p?.layout.pos.get(node) : undefined
-                          if (p && node !== undefined && box) {
-                            setSel({ instKey: p.inst.key, nodeId: node })
-                            rf.setCenter(p.x + box.x + box.w / 2, p.y + box.y + box.h / 2, { zoom: 1, duration: 450 })
-                          }
+                          const t = errorTarget()
+                          if (t) actions.select(t.p.inst.key, t.node)
                         }}
                       >
                         ir ao erro
@@ -361,7 +501,7 @@ function Shell() {
                     )}
                     <button onClick={() => setSel({ special: 'request' })}>Requisição</button>
                     <button onClick={() => setSel({ special: 'response' })}>Resposta</button>
-                    <button className="x" title="sair da execução (visão estática)" onClick={() => { setExec(null); writeHash(view) }}>
+                    <button className="x" title="sair da execução (visão estática)" onClick={() => { setExec(null); setSel(null); writeHash(view) }}>
                       ×
                     </button>
                   </div>
@@ -372,7 +512,7 @@ function Shell() {
                       <MethodChip key={m} m={m} />
                     ))}
                     <span className="ep">{route.path}</span>
-                    <span className="muted">visão estática · todos os caminhos possíveis · clique em + para entrar nas funções</span>
+                    <span className="muted">visão estática · todos os caminhos possíveis · <b>+</b> entra numa função · clique no título de uma função para ver entrada, código e saída</span>
                   </div>
                 )}
                 {view.kind === 'fn' && !activeExec && (
@@ -381,6 +521,7 @@ function Shell() {
                     <span className="muted">{view.fn.split('::')[0]}</span>
                   </div>
                 )}
+                <div className="flowwrap">
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}
@@ -402,11 +543,14 @@ function Shell() {
                   <Controls showInteractive={false} />
                   <MiniMap pannable zoomable nodeStrokeWidth={3} />
                 </ReactFlow>
+                {/* the function panel covers the canvas only, the execution bar stays visible */}
+                {wide && inspector}
+                </div>
               </>
             )}
           </main>
 
-          {sel && view.kind !== 'map' && <Inspector sel={sel} placed={placed} exec={activeExec} onClose={() => setSel(null)} />}
+          {!wide && inspector}
         </div>
       </div>
     </ActionsCtx.Provider>
@@ -426,13 +570,13 @@ function Home({
   onRoute: (id: string) => void
   onExec: (id: string) => void
 }) {
-  const errs = execs.filter((e) => e.error || (e.status ?? 0) >= 500)
-  const slow = [...execs].sort((a, b) => b.duration_ms - a.duration_ms).slice(0, 5)
+  const errs = execs.filter((e) => severity(e) === 'err')
+  const slow = execs.filter((e) => e.route_id).sort((a, b) => b.duration_ms - a.duration_ms).slice(0, 5)
   return (
     <div className="home">
       <h1>{meta?.title ?? 'API'}</h1>
       <p className="muted">
-        {routes.length} rotas mapeadas · {execs.length} execuções recentes · {errs.length} com erro
+        {routes.length} {routes.length === 1 ? 'rota mapeada' : 'rotas mapeadas'} · {execs.length} {execs.length === 1 ? 'execução recente' : 'execuções recentes'} · {errs.length} com erro
       </p>
       <div className="cards">
         <div className="card">

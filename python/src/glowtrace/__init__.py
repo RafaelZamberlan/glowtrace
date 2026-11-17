@@ -5,6 +5,13 @@ __version__ = "0.2.0"
 
 from .core import Glowtrace  # noqa: E402
 from .runtime.capture import CaptureConfig  # noqa: E402
-from .runtime.recorder import Limits  # noqa: E402
+from .runtime.recorder import Limits, current as _current  # noqa: E402
 
-__all__ = ["Glowtrace", "CaptureConfig", "Limits", "__version__"]
+
+def is_replay() -> bool:
+    """True while handling a request re-sent by Glowtrace's replay (skip e-mails, charges...)."""
+    rec = _current.get()
+    return bool(rec is not None and rec.replay_of)
+
+
+__all__ = ["Glowtrace", "CaptureConfig", "Limits", "is_replay", "__version__"]

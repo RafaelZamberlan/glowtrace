@@ -66,6 +66,8 @@ Header `x-glowtrace-trace: 0` numa requisição evita gravá-la.
   não é lido, então requisições que falham antes do controller (ex.: JSON inválido) aparecem como "não capturado".
 - Só Spring MVC/servlet: WebFlux, `@Async` e `CompletableFuture` não são gravados.
 - Validação feita pelo Spring antes do seu código (ex.: `@Valid` falhando) aparece só como status 4xx.
+- *Reenviar / Editar e reenviar* ainda não existe no agente Java (os botões aparecem desabilitados);
+  *Copiar como* cURL/HTTPie/requests/fetch funciona.
 
 ## 7. Conferir
 

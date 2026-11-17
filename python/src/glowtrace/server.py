@@ -13,6 +13,7 @@ import os
 import platform
 import sys
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -105,6 +106,7 @@ def build_server(core: "Glowtrace") -> Any:
                 "sample_rate": core.sample_rate,
                 "route_count": len(routes),
                 "internal_errors": core.internal_errors,
+                "replay_enabled": core.replay_enabled,
             }
         )
 
@@ -185,6 +187,29 @@ def build_server(core: "Glowtrace") -> Any:
         ex["overlay"] = overlay_execution(ex, core.registry)
         return JSONResponse(ex)
 
+    async def replay(request: Request) -> Response:
+        from . import replay as rp
+
+        if not core.replay_enabled:
+            return JSONResponse(
+                {"detail": "Replay desabilitado. Ative com GLOWTRACE_REPLAY=1 (somente em desenvolvimento)."},
+                status_code=403,
+            )
+        # cross-site protection: a page on another origin can only send "simple" requests
+        # (text/plain forms, no custom headers) without a CORS preflight, which we never grant
+        if "application/json" not in request.headers.get("content-type", ""):
+            return JSONResponse({"detail": "use Content-Type: application/json"}, status_code=415)
+        origin = request.headers.get("origin")
+        if origin and urlsplit(origin).netloc != request.headers.get("host", ""):
+            return JSONResponse({"detail": "origem não permitida"}, status_code=403)
+        try:
+            spec = rp.validate(core, await request.json())
+        except rp.ReplayError as exc:
+            return JSONResponse({"detail": str(exc), "fields": exc.fields}, status_code=400)
+        except ValueError:
+            return JSONResponse({"detail": "JSON inválido"}, status_code=400)
+        return JSONResponse(await rp.run(core, spec, request.scope))
+
     app = Starlette(
         routes=[
             Route(p, guard(to_index)),
@@ -196,6 +221,7 @@ def build_server(core: "Glowtrace") -> Any:
             Route(p + "/api/map", guard(api_map)),
             Route(p + "/api/executions", guard(executions), methods=["GET", "DELETE"]),
             Route(p + "/api/executions/{id}", guard(execution)),
+            Route(p + "/api/replay", guard(replay), methods=["POST"]),
         ]
     )
     app._glowtrace_internal = True  # type: ignore[attr-defined]  # never auto-instrument ourselves

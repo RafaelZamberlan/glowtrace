@@ -65,6 +65,8 @@ nível de span/função; projetos recentes cobrem só metade.
 | Armazenamento | SQLite (thread escritora, retenção por quantidade + idade) ou memória |
 | Produção | `mode="graph"` (custo zero), amostragem `sample_rate`, `X-Glowtrace-Trace: 1` força gravar uma requisição, tracer ligado só enquanto há requisição gravada |
 | UI | React + React Flow + dagre, embutida no pacote (funciona offline/air-gapped), tema claro/escuro, "ao vivo", ir ao erro, mapa da API filtrável |
+| Leitura da execução | status em cada nó (duração, ramo tomado, iterações, valor definido, exceção), painel da função (entrada · código com linhas executadas e valores · saída), card de condição por passagem, dados em Schema/Tabela/JSON com busca |
+| Replay (dev) | *Copiar como* cURL/HTTPie/requests/fetch; *Reenviar* e *Editar e reenviar* com `GLOWTRACE_REPLAY=1`, execução nova marcada como replay, `glowtrace.is_replay()` para pular efeitos |
 
 ## Configuração
 
@@ -78,6 +80,7 @@ Glowtrace(
     max_executions=500, retention_seconds=7*24*3600,
     token=None,              # exige token fora do loopback       (GLOWTRACE_TOKEN)
     allow_remote=False,      # (GLOWTRACE_ALLOW_REMOTE)
+    replay=False,            # reenviar/editar requisições pela UI (GLOWTRACE_REPLAY) - só dev
     trace_paths=None, ignore_paths=("/docs", "/openapi.json", ...),
     capture=CaptureConfig(redact_keys=("matricula",), allow_keys=("token_count",)),
     limits=Limits(max_frames=3000, max_values_per_node=5),

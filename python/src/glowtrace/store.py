@@ -27,6 +27,10 @@ _SUMMARY_KEYS = (
     "duration_ms",
     "error",
     "frame_count",
+    "mode",
+    "replay_of",
+    "hint",
+    "detail",
 )
 
 
@@ -60,6 +64,8 @@ def _match(s: dict, route_id: Optional[str], status: Optional[str]) -> bool:
     if status == "error" and not (s.get("error") or (s.get("status") or 0) >= 500):
         return False
     if status == "ok" and (s.get("error") or (s.get("status") or 0) >= 400):
+        return False
+    if status == "fail" and not (s.get("error") or (s.get("status") or 0) >= 400):
         return False
     return True
 
@@ -181,6 +187,8 @@ class SQLiteStore(Store):
             cond.append("is_error = 1")
         elif status == "ok":
             cond.append("is_error = 0 AND status < 400")
+        elif status == "fail":  # exceptions, 5xx and 4xx
+            cond.append("(is_error = 1 OR status >= 400)")
         if cond:
             sql += " WHERE " + " AND ".join(cond)
         sql += " ORDER BY started_at DESC LIMIT ?"

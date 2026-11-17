@@ -12,9 +12,10 @@ Qualquer backend de linguagem (Python hoje, Java/Node depois) expõe **as mesmas
 | `GET <prefix>/api/routes` | `{routes: Route[], middlewares: Middleware[]}` |
 | `GET <prefix>/api/function?id=<fn_id>` | `FunctionFlow` (+ `observed_calls: fn_id[]`) |
 | `GET <prefix>/api/map` | `{routes, middlewares, functions: MapFn[], edges: MapEdge[]}` |
-| `GET <prefix>/api/executions?route=&status=error\|ok&limit=` | `{executions: ExecSummary[]}` (mais recente primeiro) |
+| `GET <prefix>/api/executions?route=&status=error\|fail\|ok&limit=` | `{executions: ExecSummary[]}` (mais recente primeiro; `error` = exceção/5xx, `fail` = também 4xx) |
 | `DELETE <prefix>/api/executions` | `{deleted: n}` |
 | `GET <prefix>/api/executions/<id>` | `Execution` (campo `overlay` **opcional**: a UI calcula se ausente) |
+| `POST <prefix>/api/replay` | `ReplayResult` — **opcional**; só quando `meta.replay_enabled` (ver abaixo) |
 
 Acesso: por padrão só loopback; com token configurado, header `X-Glowtrace-Token`, cookie
 `glowtrace_token` ou `?token=` (que grava o cookie).
@@ -24,7 +25,8 @@ Acesso: por padrão só loopback; com token configurado, header `X-Glowtrace-Tok
 ```ts
 Meta = { title, version, mode: "trace"|"graph"|"off", backend: string|null,
          runtime: string /* "python 3.13.1", "java 17.0.18" */, python?: string,
-         prefix, sample_rate: number, route_count: number, internal_errors: number }
+         prefix, sample_rate: number, route_count: number, internal_errors: number,
+         replay_enabled?: boolean /* POST /api/replay disponível; ausente = false */ }
 
 Route = { id /* "GET /owners/{id}" — métodos unidos por "|" */, kind: "http"|"websocket"|"mount",
           methods: string[], path, name?, summary?, tags: string[],
@@ -81,7 +83,10 @@ registrado no frame, acrescenta `[nó, t_us]` em `path`.
 
 ```ts
 ExecSummary = { id, trace_id, started_at /* epoch s */, method, path, route_id: string|null,
-                status: number|null, duration_ms: number, error: ExecError|null, frame_count: number }
+                status: number|null, duration_ms: number, error: ExecError|null, frame_count: number,
+                mode?: "recorded"|"replay" /* ausente = recorded */, replay_of?: string|null,
+                hint?: string|null   /* alguns valores (já redigidos) da requisição: "cliente=ana · itens[2]" */,
+                detail?: string|null /* motivo de um 4xx/5xx, do corpo {"detail": ...} */ }
 
 ExecError = { type, message, escaped: boolean /* saiu do app */, status_code?: number, frame?: number }
 
@@ -90,7 +95,8 @@ Execution = ExecSummary & {
   request:  { headers: {[k]: string}, query: object, path_params: object, body: any },
   response: { headers: {[k]: string}, body: any },
   frames: Frame[],
-  overlay?: { frames: FrameOverlay[] }    // opcional
+  overlay?: { frames: FrameOverlay[] },   // opcional
+  replay_edits?: string[]                 // campos alterados no replay: "body.cliente", "headers.authorization"...
 }
 
 Frame = { id: number /* índice */, parent: number|null, fn: fn_id, call_line: number|null /* linha no pai */,
@@ -105,6 +111,28 @@ Value = JSON  // objetos: {"__type__": "Classe", campo: valor...}; truncamentos 
 FrameOverlay = { id, visits: {[nodeIdx]: count}, edges: {[edgeIdx]: count}, error_node?: number,
                  call_node?: number /* nó do pai que fez a chamada */, stale?: boolean, jumps?: [a,b][] }
 ```
+
+## Replay (opcional, só em desenvolvimento)
+
+`POST <prefix>/api/replay` reenvia uma requisição para dentro do próprio app (in-process, passando por
+todos os middlewares) e grava uma nova execução marcada como replay. Um backend que não implementa
+simplesmente não anuncia `replay_enabled` — a UI desabilita os botões e mantém "Copiar como".
+
+```ts
+ReplaySpec = { method: "GET"|"POST"|"PUT"|"PATCH"|"DELETE"|"HEAD"|"OPTIONS", path: "/..." /* nunca <prefix> */,
+               query?: string|{[k]: string}, headers?: {[k]: string}, body?: any /* string ou JSON */,
+               replay_of?: string /* id original */, edits?: string[] }
+ReplayResult = { status: number, execution_id: string|null, recorded: boolean, error: string|null,
+                 response_size: number, response_preview: string /* até 64 KB */ }
+```
+
+Regras obrigatórias:
+- desabilitado por padrão (`GLOWTRACE_REPLAY=1` ou `replay=True` habilitam) → `403` se desligado;
+- exige `Content-Type: application/json` (`415`) e, se houver `Origin`, a mesma origem (`403`) — bloqueia CSRF;
+- recusa (`400`, `{detail, fields}`) valores ainda mascarados (`[REDACTED]`, `[CPF]`, `[JWT]`...): os
+  originais nunca foram gravados, o usuário precisa informar;
+- a requisição reenviada leva `X-Glowtrace-Replay: <id original>`; o id da nova execução é decidido pelo
+  servidor (um header vindo do cliente nunca marca uma execução como replay).
 
 ## Privacidade (obrigatório em todo backend)
 

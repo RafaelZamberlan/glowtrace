@@ -229,6 +229,11 @@ class GlowtraceMiddleware:
             return await self.app(scope, receive, send)
 
         rec = Recorder(core.registry, core.capturer, core.limits)
+        replay = core.claim_replay(scope)
+        if replay is not None:
+            rec.id = replay["id"]
+            rec.replay_of = replay.get("replay_of")
+            rec.replay_edits = list(replay.get("edits") or [])
         backend = core.backend
         if backend is not None:
             backend.begin()
@@ -321,6 +326,17 @@ def build_execution(core: "Glowtrace", rec: Recorder, scope: dict, hdict: dict, 
     origin = _error_origin(frames)
     if err is not None and origin is not None:
         err["frame"] = origin
+    status = resp["status"] if resp["status"] is not None else (500 if error is not None else None)
+    request = {
+        "headers": scrub_headers(scope.get("headers") or [], cap),
+        "query": cap.capture(query) if query else {},
+        "path_params": cap.capture(dict(scope.get("path_params") or {})),
+        "body": _decode_body(b"".join(req_parts), req_state["total"], req_ct, core),
+    }
+    response = {
+        "headers": scrub_headers(resp["headers"], cap),
+        "body": _decode_body(b"".join(resp["parts"]), resp["total"], resp_hdict.get("content-type", ""), core),
+    }
     return {
         "id": rec.id,
         "trace_id": trace_id,
@@ -328,24 +344,61 @@ def build_execution(core: "Glowtrace", rec: Recorder, scope: dict, hdict: dict, 
         "method": scope.get("method"),
         "path": scope.get("path"),
         "route_id": route_id,
-        "status": resp["status"] if resp["status"] is not None else (500 if error is not None else None),
+        "status": status,
         "duration_ms": round(duration_ms, 3),
         "error": err,
         "frame_count": len(frames),
         "truncated": rec.truncated,
+        "mode": "replay" if rec.replay_of is not None else "recorded",
+        "replay_of": rec.replay_of or None,
+        "replay_edits": rec.replay_edits,
         "backend": core.backend.name if core.backend else None,
-        "request": {
-            "headers": scrub_headers(scope.get("headers") or [], cap),
-            "query": cap.capture(query) if query else {},
-            "path_params": cap.capture(dict(scope.get("path_params") or {})),
-            "body": _decode_body(b"".join(req_parts), req_state["total"], req_ct, core),
-        },
-        "response": {
-            "headers": scrub_headers(resp["headers"], cap),
-            "body": _decode_body(b"".join(resp["parts"]), resp["total"], resp_hdict.get("content-type", ""), core),
-        },
+        "hint": request_hint(request),
+        "detail": response_detail(response["body"], status),
+        "request": request,
+        "response": response,
         "frames": frames,
     }
+
+
+def _short(v, n: int = 18) -> str:
+    if isinstance(v, str):
+        return v if len(v) <= n else v[: n - 1] + "…"
+    if isinstance(v, list):
+        return f"[{len(v)}]"
+    if isinstance(v, dict):
+        return "{…}"
+    return str(v)
+
+
+def request_hint(request: dict, limit: int = 70) -> Optional[str]:
+    """A few already-redacted request values that tell executions apart in the list
+    ("cliente=ana · itens[2] · cupom=VIP")."""
+    parts: list[str] = []
+    for src in (request.get("query"), request.get("body")):
+        if not isinstance(src, dict):
+            continue
+        for k, v in src.items():
+            if k == "__type__":
+                continue
+            parts.append(f"{k}[{len(v)}]" if isinstance(v, list) else f"{k}={_short(v)}")
+            if len(parts) >= 4:
+                break
+    text = " · ".join(parts)
+    return (text[: limit - 1] + "…" if len(text) > limit else text) or None
+
+
+def response_detail(body, status) -> Optional[str]:
+    """Why a request was refused (4xx/5xx), from the usual {"detail": ...} body."""
+    if not status or status < 400 or not isinstance(body, dict) or "detail" not in body:
+        return None
+    d = body["detail"]
+    if isinstance(d, list) and d and isinstance(d[0], dict):  # FastAPI validation errors
+        loc = ".".join(str(x) for x in d[0].get("loc") or [])
+        msg = str(d[0].get("msg") or "")
+        more = f" (+{len(d) - 1})" if len(d) > 1 else ""
+        return f"{loc}: {msg}{more}"[:140]
+    return str(d)[:140] if d is not None else None
 
 
 def _unwrap_group(exc: BaseException) -> BaseException:

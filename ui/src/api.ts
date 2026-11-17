@@ -1,4 +1,4 @@
-import type { ExecSummary, Execution, FnFlow, MapData, Meta, MiddlewareInfo, RouteInfo } from './types'
+import type { ExecSummary, Execution, FnFlow, MapData, Meta, MiddlewareInfo, ReplayResult, ReplaySpec, RouteInfo } from './types'
 
 // When served by the Python package the UI lives at <prefix>/ (e.g. /_glowtrace/).
 export const BASE = import.meta.env.DEV
@@ -32,4 +32,25 @@ export const api = {
   },
   execution: (id: string) => get<Execution>('/api/executions/' + encodeURIComponent(id)),
   clear: () => get<{ deleted: number }>('/api/executions', { method: 'DELETE' }),
+  replay: async (spec: ReplaySpec): Promise<ReplayResult> => {
+    const res = await fetch(BASE + '/api/replay', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(spec),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new ReplayFailure(res.status, data.detail ?? res.statusText, data.fields ?? [])
+    return data as ReplayResult
+  },
+}
+
+export class ReplayFailure extends Error {
+  constructor(
+    public status: number,
+    detail: string,
+    public fields: string[],
+  ) {
+    super(detail)
+  }
 }

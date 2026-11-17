@@ -93,8 +93,23 @@ Os testes devem passar exatamente como sem o plugin (o Glowtrace é transparente
 | `GLOWTRACE_STORE` / `GLOWTRACE_DB` | `sqlite` / `.glowtrace/glowtrace.db` | onde guardar execuções (`memory` = só RAM) |
 | `GLOWTRACE_EXPOSE_HEADER` | `1` | `0` não adiciona o header `x-glowtrace-execution` |
 | `GLOWTRACE_ENABLED` | — | `0` desliga tudo |
+| `GLOWTRACE_REPLAY` | `0` | `1` libera **Reenviar / Editar e reenviar** na UI (só em desenvolvimento) |
 
 Header por requisição: `X-Glowtrace-Trace: 1` força gravar (útil com amostragem baixa), `0` não grava.
+
+**Reenviar uma requisição** (com `GLOWTRACE_REPLAY=1`): abra a execução → **Requisição** → *Reenviar* ou
+*Editar e reenviar* (método, caminho, query, headers, corpo). O código roda de verdade (banco, e-mails,
+chamadas externas); valores redigidos na gravação (tokens, senhas, CPF) precisam ser digitados de novo.
+A requisição reenviada chega com o header `X-Glowtrace-Replay`; para pular efeitos colaterais:
+
+```python
+import glowtrace
+
+if not glowtrace.is_replay():
+    enviar_email(pedido)
+```
+
+*Copiar como* (cURL, HTTPie, Python requests, fetch) funciona sempre, mesmo sem `GLOWTRACE_REPLAY`.
 
 ## 6. Segurança (leia antes de usar com dados reais)
 
