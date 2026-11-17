@@ -17,7 +17,7 @@ import java.util.stream.Stream;
  */
 public final class Config {
     public static final String PREFIX = "/_glowtrace";
-    public static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.3.1";
 
     public final List<String> packages = new ArrayList<>();
     public final List<Path> sources = new ArrayList<>();
@@ -30,6 +30,11 @@ public final class Config {
     public boolean generated = true; // also index target/generated-sources (OpenAPI interfaces, MapStruct...)
     public int maxExecutions = 500;
     public boolean exposeHeader = true;
+    // how much of each value is kept (max_depth / max_items / max_values / max_str)
+    public int maxDepth = 8;
+    public int maxItems = 25;
+    public int maxValues = 400;
+    public int maxStr = 400;
 
     public static Config parse(String agentArgs) {
         Map<String, String> args = new LinkedHashMap<>();
@@ -91,6 +96,10 @@ public final class Config {
             }
         }
         if ((v = opt(args, "expose_header")) != null) c.exposeHeader = !isFalse(v);
+        c.maxDepth = intOpt(args, "max_depth", c.maxDepth, 1, 200);
+        c.maxItems = intOpt(args, "max_items", c.maxItems, 1, 10_000);
+        c.maxValues = intOpt(args, "max_values", c.maxValues, 10, 1_000_000);
+        c.maxStr = intOpt(args, "max_str", c.maxStr, 20, 1_000_000);
         if ((v = opt(args, "debug")) != null) Log.debug = !isFalse(v);
         if (c.title == null) {
             c.title = c.root != null && c.root.getFileName() != null ? c.root.getFileName().toString() : "API";
@@ -100,6 +109,17 @@ public final class Config {
             if (!c.packages.isEmpty()) Log.info("packages not given; inferred " + c.packages);
         }
         return c;
+    }
+
+    private static int intOpt(Map<String, String> args, String key, int def, int lo, int hi) {
+        String v = opt(args, key);
+        if (v == null) return def;
+        try {
+            return Math.max(lo, Math.min(hi, Integer.parseInt(v.trim())));
+        } catch (NumberFormatException e) {
+            Log.warn("invalid " + key + " '" + v + "', using " + def);
+            return def;
+        }
     }
 
     private static boolean isFalse(String v) {

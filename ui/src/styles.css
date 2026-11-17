@@ -2156,3 +2156,21 @@ td.b-no {
   cursor: pointer;
   color: var(--muted);
 }
+.sr.f-opaque .sr-v {
+  color: var(--muted);
+  font-style: italic;
+}
+.sr.f-opaque .sr-f {
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px dashed var(--line-2);
+  cursor: help;
+}
+.dv-table td.f-opaque {
+  color: var(--muted);
+  font-style: italic;
+  cursor: help;
+}
+.sr-f.tip {
+  cursor: help;
+}

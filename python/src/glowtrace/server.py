@@ -107,6 +107,12 @@ def build_server(core: "Glowtrace") -> Any:
                 "route_count": len(routes),
                 "internal_errors": core.internal_errors,
                 "replay_enabled": core.replay_enabled,
+                "capture": {
+                    "max_depth": core.capturer.cfg.max_depth,
+                    "max_items": core.capturer.cfg.max_items,
+                    "max_values": core.capturer.cfg.budget,
+                    "max_str": core.capturer.cfg.max_str,
+                },
             }
         )
 

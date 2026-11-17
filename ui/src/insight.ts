@@ -51,7 +51,12 @@ export function summarize(v: unknown, max = 18): string {
 
 export function typeName(v: unknown): string {
   if (v === null || v === undefined) return 'null'
-  if (typeof v === 'string') return MASK_RE.test(v) ? 'redigido' : 'str'
+  if (typeof v === 'string') {
+    if (MASK_RE.test(v)) return 'redigido'
+    // "<LinkedHashMap>", "<ciclo No>", "<LazyProxy Owner>": the type of the value that was not opened
+    const m = /^<(?:ciclo |LazyProxy )?([A-Za-z_$][\w$.]*)[^<>]*>$/.exec(v)
+    return m ? m[1] : 'str'
+  }
   if (typeof v === 'number') return Number.isInteger(v) ? 'int' : 'float'
   if (typeof v === 'boolean') return 'bool'
   if (Array.isArray(v)) return `list[${v.length}]`

@@ -107,7 +107,7 @@ def _luhn_ok(digits: str) -> bool:
 
 @dataclass
 class CaptureConfig:
-    max_depth: int = 4
+    max_depth: int = 8  # nesting levels opened; `budget` is what bounds the size
     max_items: int = 25
     max_str: int = 400
     budget: int = 400  # rough number of leaf values per captured object
@@ -183,7 +183,7 @@ class Capturer:
 
     # -- values ------------------------------------------------------------------
     def capture(self, value: Any) -> Any:
-        budget = [self.cfg.budget]
+        budget: list = [self.cfg.budget, set()]  # [values left, ids of the containers being opened]
         try:
             return self._cap(value, 0, budget)
         except Exception as exc:  # never break the user's request
@@ -191,7 +191,7 @@ class Capturer:
 
     def capture_mapping(self, mapping: dict, names: Iterable[str] | None = None) -> dict:
         out = {}
-        budget = [self.cfg.budget]
+        budget: list = [self.cfg.budget, set()]
         keys = names if names is not None else list(mapping.keys())
         for k in keys:
             if k not in mapping:
@@ -205,7 +205,7 @@ class Capturer:
                 out[k] = f"<capture error: {type(exc).__name__}>"
         return out
 
-    def _cap(self, v: Any, depth: int, budget: list[int]) -> Any:
+    def _cap(self, v: Any, depth: int, budget: list) -> Any:
         budget[0] -= 1
         if budget[0] < 0:
             return "…"
@@ -225,6 +225,19 @@ class Capturer:
             return str(v)
         if depth >= self.cfg.max_depth:
             return f"<{type(v).__name__}>"
+        path = budget[1] if len(budget) > 1 else None
+        if path is None:
+            return self._nested(v, depth, budget)
+        vid = id(v)
+        if vid in path:  # object graph that points back to itself (ORM back-references...)
+            return f"<ciclo {type(v).__name__}>"
+        path.add(vid)
+        try:
+            return self._nested(v, depth, budget)
+        finally:
+            path.discard(vid)
+
+    def _nested(self, v: Any, depth: int, budget: list) -> Any:
         if isinstance(v, dict):
             out: dict[str, Any] = {}
             for i, (k, val) in enumerate(v.items()):
@@ -244,7 +257,7 @@ class Capturer:
             return {"__type__": type(v).__name__, "message": self._str(_safe_str(v))}
         return self._object(v, depth, budget)
 
-    def _object(self, v: Any, depth: int, budget: list[int]) -> Any:
+    def _object(self, v: Any, depth: int, budget: list) -> Any:
         t = type(v)
         mod = getattr(t, "__module__", "") or ""
         name = t.__name__

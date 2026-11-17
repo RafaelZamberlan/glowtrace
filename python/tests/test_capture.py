@@ -53,3 +53,57 @@ def test_dataclass_and_nested_redaction():
 
     c = Capturer()
     assert c.capture(User("ana", "x")) == {"__type__": "User", "nome": "ana", "senha": "[REDACTED]"}
+
+
+def test_deep_nesting_is_opened_and_cycles_stop():
+    from glowtrace.runtime.capture import Capturer, CaptureConfig
+
+    cap = Capturer(CaptureConfig())
+    body = {"instructions": [{"metadata": {"options": {"itens": [{"id": 1, "label": "Saldo"}]}}}]}
+    assert cap.capture(body) == body  # 6 levels: nothing collapsed into "<dict>"
+
+    class No:
+        def __init__(self, nome, pai=None):
+            self.nome, self.pai, self.filhos = nome, pai, []
+
+    pai = No("pai")
+    pai.filhos.append(No("filho", pai))
+    out = cap.capture(pai)
+    assert out["filhos"][0]["pai"] == "<ciclo No>"
+    assert out["filhos"][0]["nome"] == "filho"
+
+
+def test_capture_limits_are_configurable(make_ez, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from glowtrace.runtime.capture import CaptureConfig
+
+    deep = {"a": {"b": {"c": {"d": "fundo"}}}}
+
+    def app_with(**kw):
+        app = FastAPI()
+
+        @app.post("/eco")
+        def eco(body: dict):
+            return body
+
+        ez = make_ez(app, **kw)
+        return TestClient(app), ez
+
+    monkeypatch.setenv("GLOWTRACE_MAX_DEPTH", "2")
+    monkeypatch.setenv("GLOWTRACE_MAX_ITEMS", "nao-numero")  # ignored, keeps the default
+    c, ez = app_with()
+    meta = c.get("/_glowtrace/api/meta").json()["capture"]
+    assert meta["max_depth"] == 2 and meta["max_items"] == 25
+    assert ez.capturer.capture(deep) == {"a": {"b": "<dict>"}}
+
+    monkeypatch.setenv("GLOWTRACE_MAX_DEPTH", "500")  # clamped
+    c, ez = app_with()
+    assert c.get("/_glowtrace/api/meta").json()["capture"]["max_depth"] == 200
+
+    monkeypatch.delenv("GLOWTRACE_MAX_DEPTH")
+    monkeypatch.delenv("GLOWTRACE_MAX_ITEMS")
+    c, ez = app_with(capture=CaptureConfig(max_depth=3, max_items=2))
+    assert ez.capturer.capture(deep) == {"a": {"b": {"c": "<dict>"}}}
+    assert ez.capturer.capture([1, 2, 3, 4]) == [1, 2, "…(+2)"]
