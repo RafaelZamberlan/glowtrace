@@ -6,7 +6,7 @@
 
     <groupId>io.glowtrace</groupId>
     <artifactId>glowtrace-agent</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
     <name>Glowtrace Java agent</name>
     <description>Maps Spring endpoints into flow graphs and records request executions (javaagent).</description>

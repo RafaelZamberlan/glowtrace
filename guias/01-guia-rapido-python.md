@@ -15,9 +15,9 @@ mostrando por onde ela passou (funções, `if/else`, loops, `try/except`, valore
 ## 2. Instalar (no ambiente virtual do SEU projeto)
 
 ```bash
-pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.2.0/glowtrace-0.2.0-py3-none-any.whl"
+pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.0/glowtrace-0.3.0-py3-none-any.whl"
 # ou com uv:
-uv pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.2.0/glowtrace-0.2.0-py3-none-any.whl"
+uv pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.0/glowtrace-0.3.0-py3-none-any.whl"
 ```
 
 O pacote se chama `glowtrace` e é importado como `glowtrace`.
