@@ -15,9 +15,9 @@ mostrando por onde ela passou (funções, `if/else`, loops, `try/except`, valore
 ## 2. Instalar (no ambiente virtual do SEU projeto)
 
 ```bash
-pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.0/glowtrace-0.3.0-py3-none-any.whl"
+pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.1/glowtrace-0.3.1-py3-none-any.whl"
 # ou com uv:
-uv pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.0/glowtrace-0.3.0-py3-none-any.whl"
+uv pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.1/glowtrace-0.3.1-py3-none-any.whl"
 ```
 
 O pacote se chama `glowtrace` e é importado como `glowtrace`.
@@ -94,6 +94,10 @@ Os testes devem passar exatamente como sem o plugin (o Glowtrace é transparente
 | `GLOWTRACE_EXPOSE_HEADER` | `1` | `0` não adiciona o header `x-glowtrace-execution` |
 | `GLOWTRACE_ENABLED` | — | `0` desliga tudo |
 | `GLOWTRACE_REPLAY` | `0` | `1` libera **Reenviar / Editar e reenviar** na UI (só em desenvolvimento) |
+| `GLOWTRACE_MAX_DEPTH` | `8` | níveis de objetos aninhados abertos (até 200) |
+| `GLOWTRACE_MAX_ITEMS` | `25` | itens de lista / campos de objeto mostrados |
+| `GLOWTRACE_MAX_VALUES` | `400` | valores lidos por captura, somando todos os níveis |
+| `GLOWTRACE_MAX_STR` | `400` | caracteres guardados de cada texto |
 
 Header por requisição: `X-Glowtrace-Trace: 1` força gravar (útil com amostragem baixa), `0` não grava.
 

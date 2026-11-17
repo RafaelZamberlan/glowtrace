@@ -188,6 +188,7 @@ public final class UiServer {
         d.put("sample_rate", 1.0);
         d.put("route_count", r == null ? 0 : r.routeCount());
         d.put("internal_errors", Log.INTERNAL_ERRORS.get());
+        d.put("capture", io.glowtrace.agent.runtime.Capture.limits());
         return d;
     }
 

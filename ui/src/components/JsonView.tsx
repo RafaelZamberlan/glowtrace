@@ -8,7 +8,12 @@ function Scalar({ v }: { v: unknown }) {
   if (v === null || v === undefined) return <span className="j-null">null</span>
   if (typeof v === 'string') {
     if (v === '[REDACTED]' || /^\[(CPF|CNPJ|CARD|JWT)\]$/.test(v)) return <span className="j-red">{v}</span>
-    if (/^<.*>$/.test(v)) return <span className="j-obj">{v}</span>
+    if (/^<.*>$/.test(v))
+      return (
+        <span className="j-obj" title="valor não aberto pelo Glowtrace (profundidade, ciclo, framework ou proxy)">
+          {v}
+        </span>
+      )
     return <span className="j-str">"{v}"</span>
   }
   if (typeof v === 'number') return <span className="j-num">{String(v)}</span>

@@ -82,7 +82,8 @@ Glowtrace(
     allow_remote=False,      # (GLOWTRACE_ALLOW_REMOTE)
     replay=False,            # reenviar/editar requisições pela UI (GLOWTRACE_REPLAY) - só dev
     trace_paths=None, ignore_paths=("/docs", "/openapi.json", ...),
-    capture=CaptureConfig(redact_keys=("matricula",), allow_keys=("token_count",)),
+    capture=CaptureConfig(redact_keys=("matricula",), allow_keys=("token_count",),
+                          max_depth=8, max_items=25, budget=400, max_str=400),  # GLOWTRACE_MAX_DEPTH/_ITEMS/_VALUES/_STR
     limits=Limits(max_frames=3000, max_values_per_node=5),
 )
 ```

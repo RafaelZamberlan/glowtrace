@@ -39,6 +39,34 @@ def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     return v if v not in (None, "") else default
 
 
+# how much of each value is kept: env > CaptureConfig > defaults; clamped to sane bounds
+_LIMITS = (
+    # env var, CaptureConfig field, min, max
+    ("GLOWTRACE_MAX_DEPTH", "max_depth", 1, 200),
+    ("GLOWTRACE_MAX_ITEMS", "max_items", 1, 10_000),
+    ("GLOWTRACE_MAX_VALUES", "budget", 10, 1_000_000),
+    ("GLOWTRACE_MAX_STR", "max_str", 20, 1_000_000),
+)
+
+
+def capture_limits(cfg: CaptureConfig) -> CaptureConfig:
+    import dataclasses
+
+    changes = {}
+    for env, field_name, lo, hi in _LIMITS:
+        raw = _env(env)
+        value = getattr(cfg, field_name)
+        if raw is not None:
+            try:
+                value = int(raw)
+            except ValueError:
+                import warnings
+
+                warnings.warn(f"{env}={raw!r} não é um número; usando {value}", stacklevel=3)
+        changes[field_name] = max(lo, min(hi, int(value)))
+    return dataclasses.replace(cfg, **changes)
+
+
 class Glowtrace:
     """Plug Glowtrace into an ASGI app (FastAPI / Starlette).
 
@@ -112,7 +140,7 @@ class Glowtrace:
         self.internal_errors = 0
 
         self.registry = Registry(self.roots, list(exclude) if exclude else None)
-        self.capturer = Capturer(capture)
+        self.capturer = Capturer(capture_limits(capture or CaptureConfig()))
         self.adapter = FastAPIAdapter(app, self)
 
         # storage

@@ -101,6 +101,7 @@ public final class GlowtraceAgent {
         }
         Store.INSTANCE.setMax(cfg.maxExecutions);
         io.glowtrace.agent.runtime.Capture.setProjectPackages(cfg.packages);
+        io.glowtrace.agent.runtime.Capture.setLimits(cfg.maxDepth, cfg.maxItems, cfg.maxValues, cfg.maxStr);
         boolean trace = cfg.mode.equals("trace") && !cfg.packages.isEmpty();
         if (cfg.mode.equals("trace") && cfg.packages.isEmpty()) {
             Log.warn("no packages= given (and none inferred): runtime recording disabled, graph only");

@@ -1,6 +1,7 @@
 import { Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
+import { setCaptureLimits } from './components/DataView'
 import { severity } from './insight'
 import { computeOverlay } from './overlay'
 import { ActionsCtx, nodeTypes, type Actions } from './components/FlowNodes'
@@ -82,6 +83,7 @@ function Shell() {
     Promise.all([api.meta(), api.routes()])
       .then(([m, r]) => {
         setMeta(m)
+        setCaptureLimits(m.capture)
         setRoutes(r.routes)
         setMws(r.middlewares)
         document.title = `Glowtrace · ${m.title}`

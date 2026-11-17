@@ -56,6 +56,14 @@ no argumento do agente). Faça requisições à API e abra a aba **Execuções**
 | `token` | — | exige token para acesso fora do localhost |
 | `generated` | `true` | também lê `target/generated-sources` (interfaces OpenAPI, MapStruct) |
 | `max_executions` | `500` | execuções guardadas em memória |
+| `max_depth` | `8` | níveis de objetos aninhados abertos (até 200) |
+| `max_items` | `25` | itens de lista / campos de objeto mostrados (até 10000) |
+| `max_values` | `400` | valores lidos por captura, somando todos os níveis (até 1000000) |
+| `max_str` | `400` | caracteres guardados de cada texto |
+
+Cada opção também vale como `-Dglowtrace.<opção>=…` ou variável `GLOWTRACE_<OPÇÃO>` (ex.: `GLOWTRACE_MAX_DEPTH=20`).
+Quando um valor aparece como **não aberto** ou **cortado** na interface, passe o mouse: a dica diz qual limite atuou.
+Limites maiores deixam cada execução maior (memória e tela); aumente só o necessário.
 
 Header `x-glowtrace-trace: 0` numa requisição evita gravá-la.
 

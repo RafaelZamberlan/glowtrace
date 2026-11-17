@@ -26,7 +26,8 @@ Acesso: por padrão só loopback; com token configurado, header `X-Glowtrace-Tok
 Meta = { title, version, mode: "trace"|"graph"|"off", backend: string|null,
          runtime: string /* "python 3.13.1", "java 17.0.18" */, python?: string,
          prefix, sample_rate: number, route_count: number, internal_errors: number,
-         replay_enabled?: boolean /* POST /api/replay disponível; ausente = false */ }
+         replay_enabled?: boolean /* POST /api/replay disponível; ausente = false */,
+         capture?: { max_depth, max_items, max_values, max_str } /* limites de captura em uso (dicas da UI) */ }
 
 Route = { id /* "GET /owners/{id}" — métodos unidos por "|" */, kind: "http"|"websocket"|"mount",
           methods: string[], path, name?, summary?, tags: string[],
@@ -107,6 +108,7 @@ Frame = { id: number /* índice */, parent: number|null, fn: fn_id, call_line: n
           raised?: {line, type, message}[], hash?: source_hash, incomplete?: true, truncated?: true }
 
 Value = JSON  // objetos: {"__type__": "Classe", campo: valor...}; truncamentos com "…"; segredos "[REDACTED]"/"[CPF]"/"[JWT]"...
+              // valores não abertos: "<Classe>" (limite de profundidade, framework, proxy), "<ciclo Classe>" (referência circular)
 
 FrameOverlay = { id, visits: {[nodeIdx]: count}, edges: {[edgeIdx]: count}, error_node?: number,
                  call_node?: number /* nó do pai que fez a chamada */, stale?: boolean, jumps?: [a,b][] }

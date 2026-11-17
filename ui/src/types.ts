@@ -82,6 +82,15 @@ export interface Meta {
   route_count: number
   /** POST /api/replay is enabled (GLOWTRACE_REPLAY=1, development only) */
   replay_enabled?: boolean
+  /** how much of each value is kept (GLOWTRACE_MAX_DEPTH / _ITEMS / _VALUES / _STR) */
+  capture?: CaptureLimits
+}
+
+export interface CaptureLimits {
+  max_depth: number
+  max_items: number
+  max_values: number
+  max_str: number
 }
 
 export interface ExecError {

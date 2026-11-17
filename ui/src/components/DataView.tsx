@@ -3,6 +3,7 @@
 // null / empty / truncated / masked highlighting, guard for very large values.
 import { Fragment, useMemo, useRef, useState } from 'react'
 import { MASK_RE, summarize, typeName } from '../insight'
+import type { CaptureLimits } from '../types'
 import { JsonView } from './JsonView'
 
 type View = 'schema' | 'table' | 'json'
@@ -49,13 +50,36 @@ function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-type Flag = 'null' | 'empty' | 'trunc' | 'mask'
+type Flag = 'null' | 'empty' | 'trunc' | 'mask' | 'opaque'
+
+// capture limits of the running backend (meta.capture), shown in the "cut here" hints
+let LIMITS: CaptureLimits | null = null
+export function setCaptureLimits(l: CaptureLimits | null | undefined) {
+  LIMITS = l ?? null
+}
+
+/** "<LinkedHashMap>", "<ciclo No>", "<LazyCollection>"...: a value Glowtrace chose not to open. */
+export function opaqueTip(v: unknown): string {
+  if (typeof v === 'string' && v.startsWith('<ciclo '))
+    return 'Este objeto aponta de volta para um objeto que já aparece acima (ciclo): o Glowtrace para aqui para não repetir.'
+  return `O Glowtrace não abriu este valor. Causas possíveis: o limite de ${LIMITS?.max_depth ?? 8} níveis de profundidade (aumente com GLOWTRACE_MAX_DEPTH), ou um objeto de framework, proxy ou coleção ainda não carregada do banco, que nunca são lidos para não causar efeitos colaterais.`
+}
+
+function truncTip(v: unknown, key: string): string {
+  const items = LIMITS?.max_items ?? 25
+  if (key === '…') return `Cortado em ${items} campos/itens (aumente com GLOWTRACE_MAX_ITEMS).`
+  if (v === '…') return `Limite de ${LIMITS?.max_values ?? 400} valores por captura atingido (aumente com GLOWTRACE_MAX_VALUES).`
+  if (typeof v === 'string' && /^…\(\+\d+\)$/.test(v)) return `Lista cortada em ${items} itens (aumente com GLOWTRACE_MAX_ITEMS).`
+  return `Texto cortado em ${LIMITS?.max_str ?? 400} caracteres (aumente com GLOWTRACE_MAX_STR).`
+}
+
 function flagsOf(v: unknown, key: string): Flag[] {
   const f: Flag[] = []
   if (v === null || v === undefined) f.push('null')
   else if (v === '' || (Array.isArray(v) && v.length === 0) || (isObj(v) && Object.keys(v).filter((k) => k !== '__type__').length === 0)) f.push('empty')
-  if (key === '…' || (typeof v === 'string' && TRUNC_RE.test(v))) f.push('trunc')
+  if (key === '…' || v === '…' || (typeof v === 'string' && TRUNC_RE.test(v))) f.push('trunc')
   if (typeof v === 'string' && MASK_RE.test(v)) f.push('mask')
+  else if (typeof v === 'string' && /^<[^<>]+>$/.test(v)) f.push('opaque')
   return f
 }
 
@@ -241,8 +265,17 @@ function SchemaView({ value, root, q, onCopy }: { value: unknown; root: string; 
           <span className="sr-v">{r.leaf ? summarize(r.value, 60) : ''}</span>
           {r.flags.includes('null') && <span className="sr-f">nulo</span>}
           {r.flags.includes('empty') && <span className="sr-f">vazio</span>}
-          {r.flags.includes('trunc') && <span className="sr-f">cortado</span>}
+          {r.flags.includes('trunc') && (
+            <span className="sr-f tip" title={truncTip(r.value, r.key)}>
+              cortado
+            </span>
+          )}
           {r.flags.includes('mask') && <span className="sr-f">redigido</span>}
+          {r.flags.includes('opaque') && (
+            <span className="sr-f" title={opaqueTip(r.value)}>
+              não aberto
+            </span>
+          )}
           <span className="sr-a">
             <button
               title={`copiar caminho: ${r.path}`}
@@ -275,7 +308,11 @@ function TableView({ value, q }: { value: unknown; q: string }) {
   const hit = (cells: unknown[]) => !needle || cells.some((c) => leafText(c).toLowerCase().includes(needle))
   const cell = (v: unknown) => {
     const f = flagsOf(v, '')
-    return <td className={f.map((x) => 'f-' + x).join(' ')}>{Array.isArray(v) || isObj(v) ? summarize(v, 40) : leafText(v ?? null)}</td>
+    return (
+      <td className={f.map((x) => 'f-' + x).join(' ')} title={f.includes('opaque') ? opaqueTip(v) : f.includes('trunc') ? truncTip(v, '') : undefined}>
+        {Array.isArray(v) || isObj(v) ? summarize(v, 40) : leafText(v ?? null)}
+      </td>
+    )
   }
   // list of records → one row per item, union of keys as columns
   if (Array.isArray(value) && value.length && value.every((x) => isObj(x))) {

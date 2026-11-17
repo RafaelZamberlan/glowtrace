@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,10 +27,29 @@ public final class Capture {
     private Capture() {}
 
     public static final String REDACTED = "[REDACTED]";
-    static final int MAX_DEPTH = 4;
-    static final int MAX_ITEMS = 25;
-    static final int MAX_STR = 400;
-    static final int BUDGET = 400;
+    // limits (configurable: max_depth / max_items / max_values / max_str, see Config)
+    /** nesting levels opened; BUDGET is what bounds the size of a captured value */
+    static volatile int MAX_DEPTH = 8;
+    static volatile int MAX_ITEMS = 25;
+    static volatile int MAX_STR = 400;
+    /** values read per captured value (all levels together) */
+    static volatile int BUDGET = 400;
+
+    public static void setLimits(int depth, int items, int values, int str) {
+        MAX_DEPTH = depth;
+        MAX_ITEMS = items;
+        BUDGET = values;
+        MAX_STR = str;
+    }
+
+    public static Map<String, Object> limits() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("max_depth", MAX_DEPTH);
+        m.put("max_items", MAX_ITEMS);
+        m.put("max_values", BUDGET);
+        m.put("max_str", MAX_STR);
+        return m;
+    }
 
     private static final String[] STRONG_KEY_PARTS = {"password", "passwd", "senha", "secret", "token", "apikey",
             "api_key", "authorization", "cookie", "privatekey", "private_key", "credential", "cpf", "cnpj",
@@ -57,6 +77,8 @@ public final class Capture {
             "org.aspectj.", "org.mapstruct.", "io.swagger.", "org.openapitools.", "io.glowtrace."};
 
     private static final Map<String, Boolean> KEY_CACHE = new ConcurrentHashMap<>();
+    /** containers being opened on this thread right now: an object graph that points back to itself stops here */
+    private static final ThreadLocal<IdentityHashMap<Object, Boolean>> PATH = ThreadLocal.withInitial(IdentityHashMap::new);
     /** project package prefixes ("org.example.app."): always captured by fields, even under org.springframework. */
     private static volatile String[] projectPrefixes = new String[0];
 
@@ -284,6 +306,17 @@ public final class Capture {
             return "<" + (sup != null ? sup.getSimpleName() : c.getSimpleName()) + " proxy>";
         }
         if (depth >= MAX_DEPTH) return "<" + c.getSimpleName() + ">";
+        IdentityHashMap<Object, Boolean> path = PATH.get();
+        if (path.containsKey(v)) return "<ciclo " + c.getSimpleName() + ">";
+        path.put(v, Boolean.TRUE);
+        try {
+            return nested(v, c, cn, depth, budget);
+        } finally {
+            path.remove(v);
+        }
+    }
+
+    private static Object nested(Object v, Class<?> c, String cn, int depth, int[] budget) {
         if (v instanceof Map) {
             Map<?, ?> m = (Map<?, ?>) v;
             Map<String, Object> out = new LinkedHashMap<>();
