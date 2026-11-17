@@ -107,3 +107,71 @@ def test_capture_limits_are_configurable(make_ez, monkeypatch):
     c, ez = app_with(capture=CaptureConfig(max_depth=3, max_items=2))
     assert ez.capturer.capture(deep) == {"a": {"b": {"c": "<dict>"}}}
     assert ez.capturer.capture([1, 2, 3, 4]) == [1, 2, "…(+2)"]
+
+
+def test_common_data_types_are_readable():
+    import collections
+    import enum
+    import io
+    import pathlib
+    import typing
+
+    import httpx
+    import starlette.datastructures as sd
+    from starlette.responses import JSONResponse, RedirectResponse, StreamingResponse
+
+    from glowtrace.runtime.capture import Capturer, CaptureConfig
+
+    cap = Capturer(CaptureConfig()).capture
+
+    class Nivel(enum.IntEnum):
+        A = 1
+
+    class Ponto(typing.NamedTuple):
+        x: int
+        y: int
+
+    assert cap(Nivel.A) == "Nivel.A"
+    assert cap(Ponto(1, 2)) == {"x": 1, "y": 2}
+    assert cap(pathlib.PurePosixPath("a/b")) == "a/b"
+    assert cap(collections.deque([1, 2])) == [1, 2]
+    assert cap(JSONResponse({"ok": True}, status_code=201)) == {
+        "__type__": "JSONResponse", "status_code": 201, "media_type": "application/json", "body": {"ok": True}}
+    assert cap(RedirectResponse("/novo"))["location"] == "/novo"
+    assert cap(StreamingResponse(iter([b"x"])))["body"] == "<stream: não lido>"
+    assert cap(httpx.Response(200, json={"token": "abc", "n": 1}))["body"] == {"token": "[REDACTED]", "n": 1}
+    assert cap(sd.QueryParams("a=1&a=2&b=3")) == {"a": ["1", "2"], "b": "3"}
+    assert cap(sd.Headers({"authorization": "Bearer x.y.z", "x-id": "1"})) == {"authorization": "[REDACTED]", "x-id": "1"}
+    up = cap(sd.UploadFile(io.BytesIO(b"abc"), filename="f.png", size=3, headers=sd.Headers({"content-type": "image/png"})))
+    assert up == {"__type__": "UploadFile", "filename": "f.png", "size": 3, "content_type": "image/png"}
+
+    def gen():
+        yield 1
+
+    assert cap(gen()).startswith("<generator")  # never consumed
+
+
+def test_sqlalchemy_rows_and_numpy_previews():
+    import pytest
+
+    from glowtrace.runtime.capture import Capturer, CaptureConfig
+
+    cap = Capturer(CaptureConfig()).capture
+    try:
+        import sqlalchemy as sa
+    except ImportError:
+        sa = None
+    if sa is not None:
+        eng = sa.create_engine("sqlite://")
+        with eng.connect() as c:
+            row = c.execute(sa.text("select 1 as id, 'ABC' as placa")).first()
+            assert cap(row) == {"id": 1, "placa": "ABC"}
+            assert cap(c.execute(sa.text("select 2 as id")).mappings().first()) == {"id": 2}
+    try:
+        import numpy as np
+    except ImportError:
+        if sa is None:
+            pytest.skip("sqlalchemy e numpy não instalados")
+        return
+    assert cap(np.int64(5)) == 5
+    assert cap(np.array([1, 2]))["valores"] == [1, 2]

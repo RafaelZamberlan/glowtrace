@@ -70,6 +70,11 @@ Header `x-glowtrace-trace: 0` numa requisição evita gravá-la.
 ## 6. Limitações atuais
 
 - Não captura variáveis locais (argumentos, retornos e exceções sim).
+- Valores lidos: POJOs/records do projeto, coleções, `Optional`, `ResponseEntity`, `ProblemDetail`, `Page`/`Slice`,
+  `PageRequest`/`Sort`, `HttpHeaders`, `MediaType`, JSON do Jackson 2/3 e do Gson, `CompletableFuture` já concluído,
+  `Authentication`/`Jwt` do Spring Security (com senha/token redigidos), `BindingResult`, `java.time`, `UUID`...
+  **Não abertos de propósito** (aparecem como "não aberto"): `Stream`/`Iterator` (ler consumiria), coleções JPA
+  ainda não carregadas, proxies, beans do Spring e `Iterable` próprio sem campos.
 - Corpo: reconstruído do parâmetro `@RequestBody` e do retorno do controller (já com redação); o corpo bruto
   não é lido, então requisições que falham antes do controller (ex.: JSON inválido) aparecem como "não capturado".
 - Só Spring MVC/servlet: WebFlux, `@Async` e `CompletableFuture` não são gravados.

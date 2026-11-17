@@ -2174,3 +2174,30 @@ td.b-no {
 .sr-f.tip {
   cursor: help;
 }
+.sr-jt {
+  font-size: 10px;
+  border: 1px solid var(--c-io);
+  color: var(--c-io);
+  background: var(--panel);
+  border-radius: 4px;
+  padding: 0 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sr-json {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 6px 6px;
+  background: var(--panel-2);
+}
+.sr-json .json {
+  max-height: none;
+}
+.j-clip {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  opacity: 0.75;
+}

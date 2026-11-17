@@ -12,7 +12,7 @@ Pacotes prontos para instalar (sem compilar nada):
 
 Downloads em https://github.com/RafaelZamberlan/glowtrace/releases/latest
 
-- Python: `pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.1/glowtrace-0.3.1-py3-none-any.whl"`
+- Python: `pip install "https://github.com/RafaelZamberlan/glowtrace/releases/download/v0.3.2/glowtrace-0.3.2-py3-none-any.whl"`
 - Java: https://github.com/RafaelZamberlan/glowtrace/releases/latest/download/glowtrace-agent.jar
 - **Java para outro PC:** https://github.com/RafaelZamberlan/glowtrace/releases/latest/download/glowtrace-java-kit.zip (jar + atalhos
   `glowtrace-java.ps1`/`.sh` + `verificar.ps1` + `LEIAME.md`; fontes do kit em `guias/kit-java/`)
